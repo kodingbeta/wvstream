@@ -1,0 +1,5 @@
+libwvstream/*.dll
+*.sdf
+*.suo
+*.opensdf
+*.user

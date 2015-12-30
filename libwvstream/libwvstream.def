@@ -1,0 +1,4 @@
+LIBRARY	"libwvstream"
+EXPORTS
+initialize
+play
