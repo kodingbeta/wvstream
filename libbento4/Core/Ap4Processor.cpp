@@ -239,7 +239,9 @@ AP4_Processor::ProcessFragments(AP4_MoovAtom*              moov,
             if (AP4_FAILED(result)) return result;
         }
              
-        // write the moof
+		output.Buffer();
+		
+		// write the moof
         AP4_UI64 moof_out_start = 0;
         output.Tell(moof_out_start);
         moof->Write(output);
@@ -346,12 +348,14 @@ AP4_Processor::ProcessFragments(AP4_MoovAtom*              moov,
 #if defined(AP4_DEBUG)
         AP4_ASSERT(mdat_out_end-mdat_out_start == mdat_size);
 #endif
-        output.Seek(mdat_out_start);
+		if (AP4_FAILED(result = output.Seek(mdat_out_start)))
+			return result;
         output.WriteUI32((AP4_UI32)mdat_size);
         output.Seek(mdat_out_end);
         
         // update the moof if needed
-        output.Seek(moof_out_start);
+		if (AP4_FAILED(result = output.Seek(moof_out_start)))
+			return result;
         moof->Write(output);
         output.Seek(mdat_out_end);
         
@@ -374,6 +378,8 @@ AP4_Processor::ProcessFragments(AP4_MoovAtom*              moov,
         for (unsigned int i=0; i<sample_tables.ItemCount(); i++) {
             delete sample_tables[i];
         }
+		if (AP4_FAILED(result = output.Flush()))
+			return result;
 	}
     
     // update the mfra if we have one
@@ -1099,7 +1105,9 @@ AP4_Processor::MuxStream(
 		for (AP4_Cardinal i(0); i < track_count; ++i)
 			moof_locations[i] = (i < audio_track_count) ? moof ? moof->m_Offset : 0 : v_moof ? v_moof->m_Offset : 0;
 		
-		result = ProcessFragments(moov, frags, NULL, NULL, 0, output, &moof_locations);
+		if (AP4_FAILED(ProcessFragments(moov, frags, NULL, NULL, 0, output, &moof_locations)))
+			return result;
+		
 		frags.DeleteReferences();
 
 		//Now both streams should be on the next MOOF section

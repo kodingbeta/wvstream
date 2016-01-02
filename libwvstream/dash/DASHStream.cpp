@@ -59,9 +59,9 @@ bool DASHStream::prepare_stream(uint32_t const offset, const uint32_t width,
 
 	uint32_t bandwidth = max_bandwidth;
 	if (!bandwidth)
-		bandwidth =  static_cast<uint32_t>(tree_.get_download_speed()*(type_ == DASHTree::VIDEO ? 6.4 : 1.6)); //Bandwith split 80 / 20
+		bandwidth =  static_cast<uint32_t>(tree_.get_download_speed()*(type_ == DASHTree::VIDEO ? 7.2 : 0.8)); //Bandwith split 90 / 10
 	else 
-		bandwidth = static_cast<uint32_t>(bandwidth *(type_ == DASHTree::VIDEO ? 0.8 : 0.2));
+		bandwidth = static_cast<uint32_t>(bandwidth *(type_ == DASHTree::VIDEO ? 0.9 : 0.1));
 	
 	absolute_position_ = 0;
 	

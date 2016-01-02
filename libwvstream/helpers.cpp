@@ -147,3 +147,11 @@ bool getInitDataFromStream(uint8_t *initData, unsigned int initdata_size, uint8_
 	}
 	return false;
 }
+
+void findreplace(std::string& str, const char *f, const char *r){
+	size_t pos = 0, lenf(strlen(f)), lenr(strlen(r));
+	while ((pos = str.find(f, pos)) != std::string::npos){
+		str.replace(pos, lenf, r);
+		pos += lenr;
+	}
+}

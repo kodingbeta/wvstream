@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <inttypes.h>
 
 #include "../../base/native_library.h"
 #include "../../base/compiler_specific.h"
@@ -11,6 +12,8 @@
 #include "../base/cdm_config.h"
 
 namespace media {
+
+uint64_t gtc();
 
 class CdmAdapter : NON_EXPORTED_BASE(public cdm::Host_8) 
 {
@@ -51,7 +54,7 @@ class CdmAdapter : NON_EXPORTED_BASE(public cdm::Host_8)
 		const char* session_id,
 		uint32_t session_id_size);
 
-	void TimerExpired(void* context, int64_t delay_ms);
+	void TimerExpired(void* context);
 
 	cdm::Status Decrypt(const cdm::InputBuffer& encrypted_buffer,
 		cdm::DecryptedBlock* decrypted_buffer);
@@ -166,6 +169,9 @@ private:
   cdm::Buffer *active_buffer_;
 
   cdm::ContentDecryptionModule *cdm_;
+
+  uint64_t timer_expired_;
+  void *timer_context_;
   
   DISALLOW_COPY_AND_ASSIGN(CdmAdapter);
 };

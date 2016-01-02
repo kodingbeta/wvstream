@@ -28,6 +28,7 @@ namespace dash
 			uint32_t  bytesToRead);
 		uint64_t tell(){ return absolute_position_;};
 		bool seek(uint64_t const pos);
+		DASHTree::Representation const *getRepresentation(){ return current_rep_; };
 	private:
 		bool download_segment();
 

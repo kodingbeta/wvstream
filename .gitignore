@@ -3,3 +3,7 @@ libwvstream/*.dll
 *.suo
 *.opensdf
 *.user
+Debug/
+*/Debug/
+Release/
+*/Release/

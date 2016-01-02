@@ -2,19 +2,25 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <condition_variable>
-#include <algorithm>
-#include <thread>
-#include <chrono>
-
-
 #include "cdm_adapter.h"
+#include <chrono>
 
 #define DCHECK(condition) assert(condition)
 
 #include "../base/limits.h"
 
 namespace media {
+
+uint64_t gtc()
+{
+#ifdef OS_WIN
+	return GetTickCount64();
+#else
+	struct timespec tp;
+	clock_gettime(CLOCK_REALTIME, &tp);
+	return tp.tv_sec * 1000 + tp.tv_nsec / 1000;
+#endif
+}
 
 namespace {
 
@@ -53,6 +59,8 @@ CdmAdapter::CdmAdapter(
 , cdm_(0)
 , library_(0)
 , active_buffer_(0)
+, timer_expired_(0)
+, timer_context_(0)
 {
   //DCHECK(!key_system_.empty());
   Initialize(cdm_path);
@@ -163,15 +171,19 @@ void CdmAdapter::RemoveSession(uint32_t promise_id,
   cdm_->RemoveSession(promise_id, session_id, session_id_size);
 }
 
-void CdmAdapter::TimerExpired(void* context, int64_t delay_ms)
+void CdmAdapter::TimerExpired(void* context)
 { 
-	std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
 	cdm_->TimerExpired(context);
 }
 
 cdm::Status CdmAdapter::Decrypt(const cdm::InputBuffer& encrypted_buffer,
 	cdm::DecryptedBlock* decrypted_buffer)
 {
+	if (timer_expired_ && gtc() > timer_expired_)
+	{
+		timer_expired_ = 0;
+		TimerExpired(timer_context_);
+	}
 	active_buffer_ = decrypted_buffer->DecryptedBuffer();
 	cdm::Status ret = cdm_->Decrypt(encrypted_buffer, decrypted_buffer);
 	active_buffer_ = 0;
@@ -235,8 +247,8 @@ cdm::Buffer* CdmAdapter::Allocate(uint32_t capacity)
 
 void CdmAdapter::SetTimer(int64_t delay_ms, void* context)
 {
-	std::thread t(&CdmAdapter::TimerExpired, this, context, delay_ms);
-	t.detach();
+	timer_context_ = context;
+	timer_expired_ = gtc() + delay_ms;
 }
 
 cdm::Time CdmAdapter::GetCurrentWallTime()
