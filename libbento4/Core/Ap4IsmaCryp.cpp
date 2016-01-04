@@ -262,7 +262,9 @@ AP4_IsmaCipher::EncryptSampleData(AP4_DataBuffer& data_in,
 |   AP4_IsmaTrackDecrypter::Create
 +---------------------------------------------------------------------*/
 AP4_Result
-AP4_IsmaTrackDecrypter::Create(const AP4_UI08*                 key, 
+AP4_IsmaTrackDecrypter::Create(AP4_TrakAtom*                   trak,
+                               AP4_TrexAtom*                   trex,
+                               const AP4_UI08*                 key,
                                AP4_Size                        key_size,
                                AP4_ProtectedSampleDescription* sample_description,
                                AP4_SampleEntry*                sample_entry,
@@ -280,7 +282,7 @@ AP4_IsmaTrackDecrypter::Create(const AP4_UI08*                 key,
     if (AP4_FAILED(result)) return result;
 
     // instanciate the object
-    decrypter = new AP4_IsmaTrackDecrypter(cipher, 
+    decrypter = new AP4_IsmaTrackDecrypter(trak, trex, cipher, 
                                            sample_entry, 
                                            sample_description->GetOriginalFormat());
     return AP4_SUCCESS;
@@ -289,10 +291,13 @@ AP4_IsmaTrackDecrypter::Create(const AP4_UI08*                 key,
 /*----------------------------------------------------------------------
 |   AP4_IsmaTrackDecrypter::AP4_IsmaTrackDecrypter
 +---------------------------------------------------------------------*/
-AP4_IsmaTrackDecrypter::AP4_IsmaTrackDecrypter(AP4_IsmaCipher*   cipher,
+AP4_IsmaTrackDecrypter::AP4_IsmaTrackDecrypter(AP4_TrakAtom*     trak,
+	                                           AP4_TrexAtom*     trex,
+	                                           AP4_IsmaCipher*   cipher,
                                                AP4_SampleEntry*  sample_entry,
                                                AP4_UI32          original_format) :
-    m_Cipher(cipher),
+	AP4_Processor::TrackHandler(trak, trex),
+	m_Cipher(cipher),
     m_SampleEntry(sample_entry),
     m_OriginalFormat(original_format)
 {
@@ -373,6 +378,7 @@ AP4_IsmaTrackEncrypter::AP4_IsmaTrackEncrypter(
     const AP4_UI08*  salt,
     AP4_SampleEntry* sample_entry,
     AP4_UI32         format) :
+	AP4_Processor::TrackHandler(0,0),
     m_KmsUri(kms_uri),
     m_SampleEntry(sample_entry),
     m_Format(format),

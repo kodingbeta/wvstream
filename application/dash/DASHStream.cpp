@@ -35,7 +35,7 @@ bool DASHStream::download_segment()
 {
 	segment_buffer_.clear();
 	char rangebuf[128];
-	sprintf(rangebuf, "/range/%llu-%llu", absolute_position_, current_seg_->range_end_);
+	sprintf(rangebuf, "/range/%llu-%llu", current_seg_->range_begin_, current_seg_->range_end_);
 	curl_easy_setopt(curl_handle_, CURLOPT_URL, (current_rep_->url_ + rangebuf).c_str());
 	/* Define our callback to get called when there's data to be written */
 	curl_easy_setopt(curl_handle_, CURLOPT_WRITEFUNCTION, curl_fwrite_init);
@@ -46,8 +46,7 @@ bool DASHStream::download_segment()
 	return ret == CURLE_OK;
 }
 
-bool DASHStream::prepare_stream(uint32_t const offset, const uint32_t width,
-	const uint32_t height, const char *lang, uint32_t max_bandwidth)
+bool DASHStream::prepare_stream(const uint32_t width, const uint32_t height, const char *lang, uint32_t max_bandwidth)
 {
 	language_ = lang?lang:"";
 	width_ = width;
@@ -98,12 +97,21 @@ bool DASHStream::prepare_stream(uint32_t const offset, const uint32_t width,
 	return false;
 }
  
+bool DASHStream::start_stream(const uint32_t seg_offset)
+{
+	segment_buffer_.clear();
+	current_seg_ = current_rep_->get_segment(seg_offset);
+	if (!current_seg_)
+		stopped_ = true;
+	return true;
+}
+
 uint32_t DASHStream::read(void* buffer, uint32_t  bytesToRead)
 {
 	if (stopped_)
 		return 0;
 	
-	if (segment_read_pos_ == segment_buffer_.size())
+	if (segment_read_pos_ >= segment_buffer_.size())
 	{
 		current_seg_ = current_rep_->get_next_segment(current_seg_);
 		if (!download_segment() || segment_buffer_.empty())
@@ -142,6 +150,9 @@ void DASHStream::clear()
 {
 	curl_easy_cleanup(curl_handle_);
 	curl_handle_ = 0;
+	current_period_ = 0;
+	current_adp_ = 0;
+	current_rep_ = 0;
 }
 
 DASHStream::~DASHStream()

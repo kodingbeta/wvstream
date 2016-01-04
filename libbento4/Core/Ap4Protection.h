@@ -417,7 +417,7 @@ public:
     virtual AP4_Result Initialize(AP4_AtomParent&   top_level,
                                   AP4_ByteStream&   stream,
                                   ProgressListener* listener);
-    virtual AP4_Processor::TrackHandler* CreateTrackHandler(AP4_TrakAtom* trak);
+	virtual AP4_Processor::TrackHandler* CreateTrackHandler(AP4_TrakAtom* trak, AP4_TrexAtom* trex);
 
 private:
     // members

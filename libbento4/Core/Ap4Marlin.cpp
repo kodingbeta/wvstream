@@ -521,7 +521,7 @@ AP4_MarlinIpmpDecryptingProcessor::Initialize(AP4_AtomParent&   top_level,
 |   AP4_MarlinIpmpDecryptingProcessor:CreateTrackHandler
 +---------------------------------------------------------------------*/
 AP4_Processor::TrackHandler* 
-AP4_MarlinIpmpDecryptingProcessor::CreateTrackHandler(AP4_TrakAtom* trak)
+AP4_MarlinIpmpDecryptingProcessor::CreateTrackHandler(AP4_TrakAtom* trak, AP4_TrexAtom* trex)
 {
     // look for this track in the list of entries
     AP4_MarlinIpmpParser::SinfEntry* sinf_entry = NULL;
@@ -575,7 +575,7 @@ AP4_MarlinIpmpDecryptingProcessor::CreateTrackHandler(AP4_TrakAtom* trak)
 
     // create the decrypter
     AP4_MarlinIpmpTrackDecrypter* decrypter = NULL;
-    AP4_Result result = AP4_MarlinIpmpTrackDecrypter::Create(*m_BlockCipherFactory,
+    AP4_Result result = AP4_MarlinIpmpTrackDecrypter::Create(trak, trex,*m_BlockCipherFactory,
                                                              key->GetData(), 
                                                              key->GetDataSize(),
                                                              decrypter);
@@ -588,7 +588,8 @@ AP4_MarlinIpmpDecryptingProcessor::CreateTrackHandler(AP4_TrakAtom* trak)
 |   AP4_MarlinIpmpTrackDecrypter::Create
 +---------------------------------------------------------------------*/
 AP4_Result
-AP4_MarlinIpmpTrackDecrypter::Create(AP4_BlockCipherFactory&        cipher_factory,
+AP4_MarlinIpmpTrackDecrypter::Create(AP4_TrakAtom* trak, AP4_TrexAtom* trex,
+                                     AP4_BlockCipherFactory&        cipher_factory,
                                      const AP4_UI08*                key,
                                      AP4_Size                       key_size,
                                      AP4_MarlinIpmpTrackDecrypter*& decrypter)
@@ -601,7 +602,7 @@ AP4_MarlinIpmpTrackDecrypter::Create(AP4_BlockCipherFactory&        cipher_facto
     if (AP4_FAILED(result)) return result;
     
     // create the track decrypter
-    decrypter = new AP4_MarlinIpmpTrackDecrypter(sample_decrypter);
+    decrypter = new AP4_MarlinIpmpTrackDecrypter(trak, trex, sample_decrypter);
     
     return AP4_SUCCESS;
 }
@@ -1021,7 +1022,8 @@ AP4_MarlinIpmpTrackEncrypter::Create(AP4_BlockCipherFactory&        cipher_facto
 +---------------------------------------------------------------------*/
 AP4_MarlinIpmpTrackEncrypter::AP4_MarlinIpmpTrackEncrypter(AP4_StreamCipher* cipher, 
                                                            const AP4_UI08*   iv) :
-    m_Cipher(cipher)
+	AP4_Processor::TrackHandler(NULL, NULL), 
+	m_Cipher(cipher)
 {
     // copy the IV
     AP4_CopyMemory(m_IV, iv, AP4_AES_BLOCK_SIZE);    

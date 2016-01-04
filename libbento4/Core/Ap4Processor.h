@@ -44,10 +44,12 @@
 class AP4_ContainerAtom;
 class AP4_ByteStream;
 class AP4_DataBuffer;
+class AP4_MoovAtom;
 class AP4_TrakAtom;
 class AP4_TrexAtom;
 class AP4_SidxAtom;
 class AP4_FragmentSampleTable;
+struct FragmentMapEntry;
 struct AP4_AtomLocator;
 
 /*----------------------------------------------------------------------
@@ -87,12 +89,24 @@ public:
     public:
         AP4_IMPLEMENT_DYNAMIC_CAST(TrackHandler)
 
+		TrackHandler(AP4_TrakAtom* trak, AP4_TrexAtom* trex) : m_trak_atom(trak), m_trex_atom(trex){};
+
         /**
          * Default destructor.
          */
         virtual ~TrackHandler() {}
 
-        /**
+		/**
+		* return the trak atom assigned with this class.
+		*/
+		AP4_TrakAtom *GetTrakAtom() const { return m_trak_atom; };
+
+		/**
+		* return the trex atom assigned with this class.
+		*/
+		AP4_TrexAtom *GetTrexAtom() const { return m_trex_atom; };
+
+		/**
          * A track handler may override this method if it needs to modify
          * the track atoms before processing the track samples.
          */
@@ -113,7 +127,10 @@ public:
          */
         virtual AP4_Result ProcessSample(AP4_DataBuffer& data_in,
                                          AP4_DataBuffer& data_out) = 0;
-    };
+	private:
+		AP4_TrakAtom* m_trak_atom;
+		AP4_TrexAtom* m_trex_atom;
+	};
 
     /**
      * Abstract class that defines the interface implemented by concrete
@@ -161,12 +178,11 @@ public:
     /**
      *  Default destructor
      */
-    virtual ~AP4_Processor() { m_ExternalTrackData.DeleteReferences(); }
+	virtual ~AP4_Processor();
 
-
-	AP4_Result Mux(AP4_ByteStream&   audio,
-		AP4_ByteStream&   video,
+	AP4_Result Mux(AP4_Array<AP4_ByteStream *> &input,
 		AP4_ByteStream&   output,
+		AP4_UI08		partitions,
 		ProgressListener* listener = NULL,
 		AP4_AtomFactory&  atom_factory =
 		AP4_DefaultAtomFactory::Instance);
@@ -231,7 +247,7 @@ public:
      * @return A pointer to a track handler, or NULL if no handler 
      * needs to be created for that track.
      */
-    virtual TrackHandler* CreateTrackHandler(AP4_TrakAtom* /*trak*/) { return NULL; }
+	virtual TrackHandler* CreateTrackHandler(AP4_TrakAtom* /*trak*/, AP4_TrexAtom* /*trex*/) { return NULL; }
 
     /**
      * This method can be overridden by concrete subclasses.
@@ -260,8 +276,7 @@ protected:
         AP4_ByteStream* m_MediaData;
     };
 
-	AP4_Result NormalizeTRAF(AP4_ContainerAtom *atom, AP4_UI32 start, AP4_UI32 end);
-	AP4_Result NormalizeTREX(AP4_ContainerAtom *atom, AP4_ContainerAtom *destAtom, AP4_UI32 start, AP4_UI32 end);
+	AP4_Result NormalizeTRAF(AP4_ContainerAtom *atom, AP4_UI32 start, AP4_UI32 end, AP4_UI32 &index);
 
 	AP4_Result Process(AP4_ByteStream&   input, 
                        AP4_ByteStream&   output,
@@ -270,26 +285,51 @@ protected:
                        AP4_AtomFactory&  atom_factory);
 
 	AP4_Result MuxStream(
-		AP4_ByteStream& audio,
-		AP4_ByteStream& video,
+		AP4_Array<AP4_ByteStream *> &input,
 		AP4_ByteStream& output,
+		AP4_UI08		partitions,
 		AP4_AtomFactory& atom_factory);
 
 
-    AP4_Result ProcessFragments(AP4_MoovAtom*              moov, 
-                                AP4_List<AP4_AtomLocator>& atoms, 
-                                AP4_ContainerAtom*         mfra,
-                                AP4_SidxAtom*              sidx,
-                                AP4_Position               sidx_position,
-                                AP4_ByteStream&            output,
-								AP4_Array<AP4_UI64>*       stream_atom_locations = 0);
-    
+	AP4_Result AP4_Processor::ProcessFragment(
+		AP4_ContainerAtom*		moof,
+		AP4_SidxAtom*			sidx,
+		AP4_Position			sidx_position,
+		AP4_ByteStream&			output,
+		AP4_Array<AP4_Position> &moof_locations,
+		AP4_Array<AP4_Position> &mdat_positions);
     
     AP4_List<ExternalTrackData> m_ExternalTrackData;
-    AP4_Array<AP4_UI32>         m_TrackIds;
-	AP4_Array<AP4_UI32>			m_RemapedTrackIds;
-    AP4_Array<TrackHandler*>    m_TrackHandlers;
-	AP4_Array<AP4_ByteStream*>  m_TrackInput;
+	struct PERTRACK
+	{
+		PERTRACK() :new_id(0), original_id(0), track_handler(0), streamId(0){};
+		~PERTRACK() { delete track_handler; track_handler = 0; };
+
+		AP4_UI32 new_id; //new id
+		AP4_UI32 original_id;
+		TrackHandler* track_handler;
+		AP4_Cardinal streamId;
+	};
+	AP4_Array<PERTRACK>  m_TrackData;
+
+	struct PERSTREAM
+	{
+		PERSTREAM() : stream(0), trackStart(0), trackCount(0){};
+		AP4_ByteStream* stream;
+		AP4_UI16 trackStart;
+		AP4_UI16 trackCount;
+	};
+	AP4_Array<PERSTREAM>  m_StreamData;
+
+	AP4_MoovAtom *m_MoovAtom;
+
+private:
+	typedef struct {
+		AP4_UI64 before;
+		AP4_UI64 after;
+	} FragmentMapEntry;
+	AP4_Array<FragmentMapEntry> fragment_map_;
+	AP4_UI64 FindFragmentMapEntry(AP4_UI64 fragment_offset);
 };
 
 #endif // _AP4_PROCESSOR_H_

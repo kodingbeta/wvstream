@@ -56,6 +56,10 @@ namespace dash
 					return &segments_[0] + curpos;
 				return 0;
 			};
+			const Segment *get_segment(const uint32_t pos)const
+			{
+				return pos < segments_.size() ? &segments_[pos] : 0;
+			};
 		}*current_representation_;
 
 		struct AdaptationSet

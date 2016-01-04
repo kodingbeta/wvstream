@@ -93,6 +93,9 @@ protected:
     void ReadChildren(AP4_AtomFactory& atom_factory,
                       AP4_ByteStream&  stream, 
                       AP4_UI64         size);
+	// For temporary use, will not be serialized
+	AP4_UI64		value64;
+	AP4_UI64		value32;
 };
 
 #endif // _AP4_CONTAINER_ATOM_H_

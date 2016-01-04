@@ -23,6 +23,8 @@
 #include "helpers.h"
 #include "../libcurl/include/curl/curl.h"
 
+//#define MUXED_STREAM 1
+
 /*******************************************************
 						CDM
 ********************************************************/
@@ -370,7 +372,7 @@ Session::Session(uint32_t session_id, const char *mpdURL, const char *licenseURL
 	, video_output(NULL)
 	, audio_output(NULL)
 #elif MUXED_STREAM
-	, muxed_output(NULL)
+	, muxed_output_(NULL)
 #else
 	, thread_(NULL)
 	, socket_desc_(0)
@@ -555,14 +557,29 @@ bool Session::initialize()
 
 void Session::thread_play(AP4_Position byteOffset)
 {
+#if !defined(SEPARATE_STREAMS) && !defined(MUXED_STREAM)
 	std::cout << "INFO: thread for session-id: " << session_id_ << " started" << std::endl;
 	AP4_SockStream sock_output(socket_desc_, byteOffset);
 	std::string ret("HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\n\r\n");
 	send(socket_desc_, ret.c_str(), ret.size(), 0);
-	processor_->Mux(*audio_input_, *video_input_, sock_output, NULL);
+	AP4_Array<AP4_ByteStream*> streams;
+	streams.SetItemCount(2);
+	streams[0] = audio_input_;
+	streams[1] = video_input_;
+	
+	
+	if (AP4_SUCCEEDED(processor_->Mux(streams, sock_output, 1, NULL)))
+	{
+		//Skip to the first MOOF Segments
+		audio_.start_stream(0);
+		video_.start_stream(0);
+		processor_->Mux(streams, sock_output, 2, NULL);
+	}
+	
 	closesocket(socket_desc_);
 	socket_desc_ = 0;
 	std::cout << "INFO: thread for session-id: " << session_id_ << " terminated" << std::endl;
+#endif
 }
 
 
@@ -570,9 +587,7 @@ bool Session::play(int socket_desc, AP4_Position byteOffset)
 {
 	stop();
 
-	socket_desc_ = socket_desc;
-
-	if (!video_.prepare_stream(0, width_, height_, 0, max_bandwidth_))
+	if (!video_.prepare_stream(width_, height_, 0, max_bandwidth_))
 	{
 		std::cout << "ERROR: Could not prepare video stream" << std::endl;
 		return false;
@@ -582,12 +597,12 @@ bool Session::play(int socket_desc, AP4_Position byteOffset)
 	video_input_ = new AP4_DASHStream(&video_);
 	//video_input can be used to fetch initdata for license handling now.....
 
-	if (!audio_.prepare_stream(0, 0, 0, language_.c_str(), max_bandwidth_))
+	if (!audio_.prepare_stream(0, 0, language_.c_str(), max_bandwidth_))
 	{
 		std::cout << "ERROR: Could not prepare audio stream" << std::endl;
 		return false;
 	}
-	std::cout << "Info: audio representation: " << audio_.getRepresentation()->url_ << "bandwidth: " << audio_.getRepresentation()->bandwidth_  << std::endl;
+	std::cout << "Info: audio representation: " << audio_.getRepresentation()->url_ << "bandwidth: " << audio_.getRepresentation()->bandwidth_ << std::endl;
 
 	audio_input_ = new AP4_DASHStream(&audio_);
 
@@ -599,14 +614,26 @@ bool Session::play(int socket_desc, AP4_Position byteOffset)
 #endif
 
 	processor_ = new AP4_CencDecryptingProcessor(&key_map_, NULL, new WV_CencSingleSampleDecrypter(wvadapter_));
-	
+
 	AP4_Result result;
 #ifdef SEPARATE_STREAMS
 	result = processor_->Process(*audio_input_, *audio_output_, NULL);
 	result = processor_->Process(*video_input_, *video_output_, NULL);
 #elif MUXED_STREAM
-	result = processor_->Mux(*audio_input_, *video_input_, *muxed_output_, NULL);
+	AP4_Array<AP4_ByteStream*> streams;
+	streams.SetItemCount(2);
+	streams[0] = audio_input_;
+	streams[1] = video_input_;
+
+	if (AP4_SUCCEEDED(result = processor_->Mux(streams, *muxed_output_, 1, NULL)))
+	{
+		//Skip to the first MOOF Segments
+		audio_.start_stream(0);
+		video_.start_stream(0);
+		result = processor_->Mux(streams, *muxed_output_, 2, NULL);
+	}
 #else
+	socket_desc_ = socket_desc;
 	thread_ = new std::thread(&Session::thread_play, this, byteOffset);
 	return true;
 #endif
@@ -777,15 +804,13 @@ success:;
 #else
 int main()
 {
-	const char *lic = "FILL IT FOR TESTING";
-	const char *mpd = "FILL IT FOR TESTING";
+	const char *lic = "TBD";
+	const char *mpd = "TBD";
 
 	Session s(0, mpd, lic);
 	//s.SetStreamProperties(,,,,,,); //use defaults
 	if (s.initialize())
 		s.play();
-
-
 
 	return 0;
 }

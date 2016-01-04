@@ -99,7 +99,9 @@ private:
 class AP4_IsmaTrackDecrypter : public AP4_Processor::TrackHandler {
 public:
     // construction
-    static AP4_Result Create(const AP4_UI08*                 key, 
+    static AP4_Result Create(AP4_TrakAtom*                   trak,
+		                     AP4_TrexAtom*                   trex,
+		                     const AP4_UI08*                 key, 
                              AP4_Size                        key_size,
                              AP4_ProtectedSampleDescription* sample_description,
                              AP4_SampleEntry*                sample_entry,
@@ -116,7 +118,9 @@ public:
 
 private:
     // constructor
-    AP4_IsmaTrackDecrypter(AP4_IsmaCipher*  cipher,
+	AP4_IsmaTrackDecrypter(AP4_TrakAtom*    trak,
+		                   AP4_TrexAtom*    trex,
+		                   AP4_IsmaCipher*  cipher,
                            AP4_SampleEntry* sample_entry,
                            AP4_UI32         original_format);
 

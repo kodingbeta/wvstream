@@ -183,3 +183,16 @@ AP4_SidxAtom::SetReferenceCount(unsigned int count) {
     m_References.SetItemCount(count);
     m_Size32 += m_References.ItemCount()*12;
 }
+
+
+/*----------------------------------------------------------------------
+|   AP4_SidxAtom::GetDuration
++---------------------------------------------------------------------*/
+AP4_UI64
+AP4_SidxAtom::GetDuration() {
+
+	AP4_UI64 duration(0);
+	for (AP4_Cardinal i(0); i < m_References.ItemCount(); ++i)
+		duration += m_References[i].m_SubsegmentDuration;
+	return duration;
+}

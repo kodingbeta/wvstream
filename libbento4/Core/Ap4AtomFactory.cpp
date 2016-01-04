@@ -103,6 +103,7 @@
 #include "Ap4SidxAtom.h"
 #include "Ap4SbgpAtom.h"
 #include "Ap4SgpdAtom.h"
+#include "Ap4TrafAtom.h"
 
 /*----------------------------------------------------------------------
 |   AP4_AtomFactory::~AP4_AtomFactory
@@ -690,6 +691,11 @@ AP4_AtomFactory::CreateAtomFromStream(AP4_ByteStream& stream,
             }
             break;
 
+		  case AP4_ATOM_TYPE_TRAF:
+			  if (atom_is_large) return AP4_ERROR_INVALID_FORMAT;
+			  atom = AP4_TrafAtom::Create(type, size_64, force_64, stream, *this);
+			  break;
+
           // track ref types
           case AP4_ATOM_TYPE_HINT:
           case AP4_ATOM_TYPE_CDSC:
@@ -710,7 +716,6 @@ AP4_AtomFactory::CreateAtomFromStream(AP4_ByteStream& stream,
           // container atoms
           case AP4_ATOM_TYPE_MOOF:
           case AP4_ATOM_TYPE_MVEX:
-          case AP4_ATOM_TYPE_TRAF:
           case AP4_ATOM_TYPE_TREF:
           case AP4_ATOM_TYPE_MFRA:
           case AP4_ATOM_TYPE_HNTI:

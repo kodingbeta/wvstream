@@ -869,7 +869,7 @@ AP4_StandardDecryptingProcessor::Initialize(AP4_AtomParent&   top_level,
 |   AP4_StandardDecryptingProcessor:CreateTrackHandler
 +---------------------------------------------------------------------*/
 AP4_Processor::TrackHandler* 
-AP4_StandardDecryptingProcessor::CreateTrackHandler(AP4_TrakAtom* trak)
+AP4_StandardDecryptingProcessor::CreateTrackHandler(AP4_TrakAtom* trak, AP4_TrexAtom* trex)
 {
     // find the stsd atom
     AP4_StsdAtom* stsd = AP4_DYNAMIC_CAST(AP4_StsdAtom, trak->FindChild("mdia/minf/stbl/stsd"));
@@ -889,7 +889,9 @@ AP4_StandardDecryptingProcessor::CreateTrackHandler(AP4_TrakAtom* trak)
             const AP4_DataBuffer* key = m_KeyMap.GetKey(trak->GetId());
             if (key) {
                 AP4_OmaDcfTrackDecrypter* handler = NULL;
-                AP4_Result result = AP4_OmaDcfTrackDecrypter::Create(key->GetData(), 
+                AP4_Result result = AP4_OmaDcfTrackDecrypter::Create(trak,
+                                                                     trex,
+																	 key->GetData(), 
                                                                      key->GetDataSize(), 
                                                                      protected_desc, 
                                                                      entry, 
@@ -902,7 +904,9 @@ AP4_StandardDecryptingProcessor::CreateTrackHandler(AP4_TrakAtom* trak)
             const AP4_DataBuffer* key = m_KeyMap.GetKey(trak->GetId());
             if (key) {
                 AP4_IsmaTrackDecrypter* handler = NULL;
-                AP4_Result result = AP4_IsmaTrackDecrypter::Create(key->GetData(), 
+				AP4_Result result = AP4_IsmaTrackDecrypter::Create(trak,
+					                                               trex,
+					                                               key->GetData(),
                                                                    key->GetDataSize(), 
                                                                    protected_desc, 
                                                                    entry, 

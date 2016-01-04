@@ -20,8 +20,8 @@ namespace dash
 	public:
 		DASHStream(DASHTree &tree,DASHTree::StreamType type);
 		~DASHStream();
-		bool prepare_stream(uint32_t const offset, const uint32_t width,
-			const uint32_t height, const char *lang, uint32_t max_bandwidth);
+		bool prepare_stream(const uint32_t width, const uint32_t height, const char *lang, uint32_t max_bandwidth);
+		bool start_stream(const uint32_t seg_offset);
 		void stop(){ stopped_ = true; };
 		void clear();
 		uint32_t read(void* buffer,

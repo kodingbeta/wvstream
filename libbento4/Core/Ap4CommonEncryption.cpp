@@ -431,7 +431,7 @@ AP4_CencCbcSubSampleEncrypter::EncryptSampleData(AP4_DataBuffer& data_in,
 class AP4_CencTrackEncrypter : public AP4_Processor::TrackHandler {
 public:
     // constructor
-    AP4_CencTrackEncrypter(AP4_CencVariant              variant,
+	AP4_CencTrackEncrypter(AP4_CencVariant              variant,
                            AP4_UI32                     default_algorithm_id,
                            AP4_UI08                     default_iv_size,
                            const AP4_UI08*              default_kid,
@@ -457,13 +457,14 @@ private:
 |   AP4_CencTrackEncrypter::AP4_CencTrackEncrypter
 +---------------------------------------------------------------------*/
 AP4_CencTrackEncrypter::AP4_CencTrackEncrypter(
-    AP4_CencVariant              variant,
+	AP4_CencVariant              variant,
     AP4_UI32                     default_algorithm_id,
     AP4_UI08                     default_iv_size,
     const AP4_UI08*              default_kid,
     AP4_Array<AP4_SampleEntry*>& sample_entries,
     AP4_UI32                     format) :
-    m_Variant(variant),
+	AP4_Processor::TrackHandler(0, 0),
+	m_Variant(variant),
     m_Format(format),
     m_DefaultAlgorithmId(default_algorithm_id),
     m_DefaultIvSize(default_iv_size)
@@ -1034,7 +1035,7 @@ AP4_CencEncryptingProcessor::Initialize(AP4_AtomParent&                  top_lev
 |   AP4_CencEncryptingProcessor:CreateTrackHandler
 +---------------------------------------------------------------------*/
 AP4_Processor::TrackHandler* 
-AP4_CencEncryptingProcessor::CreateTrackHandler(AP4_TrakAtom* trak)
+AP4_CencEncryptingProcessor::CreateTrackHandler(AP4_TrakAtom* trak, AP4_TrexAtom* trex)
 {
     // find the stsd atom
     AP4_StsdAtom* stsd = AP4_DYNAMIC_CAST(AP4_StsdAtom, trak->FindChild("mdia/minf/stbl/stsd"));
@@ -1631,7 +1632,9 @@ public:
     AP4_IMPLEMENT_DYNAMIC_CAST(AP4_CencTrackDecrypter)
 
     // constructor
-    static AP4_Result Create(const unsigned char*                        key,
+	static AP4_Result Create(AP4_TrakAtom* trak,
+	                         AP4_TrexAtom* trex, 
+	                         const unsigned char*                        key,
                              AP4_Size                                    key_size,
                              AP4_Array<AP4_ProtectedSampleDescription*>& sample_descriptions,
                              AP4_Array<AP4_SampleEntry*>&                sample_entries,
@@ -1653,7 +1656,9 @@ public:
     
 private:
     // constructor
-    AP4_CencTrackDecrypter(AP4_Array<AP4_ProtectedSampleDescription*>& sample_descriptions,
+	AP4_CencTrackDecrypter(AP4_TrakAtom* trak,
+		                   AP4_TrexAtom* trex, 
+		                   AP4_Array<AP4_ProtectedSampleDescription*>& sample_descriptions,
                            AP4_Array<AP4_SampleEntry*>&                sample_entries,
                            AP4_UI32                                    original_format);
 
@@ -1672,7 +1677,9 @@ AP4_DEFINE_DYNAMIC_CAST_ANCHOR(AP4_CencTrackDecrypter)
 |   AP4_CencTrackDecrypter::Create
 +---------------------------------------------------------------------*/
 AP4_Result
-AP4_CencTrackDecrypter::Create(const unsigned char*                        key,
+AP4_CencTrackDecrypter::Create(AP4_TrakAtom* trak,
+                               AP4_TrexAtom* trex, 
+                               const unsigned char*                        key,
                                AP4_Size                                    /* key_size */,
                                AP4_Array<AP4_ProtectedSampleDescription*>& sample_descriptions,
                                AP4_Array<AP4_SampleEntry*>&                sample_entries,
@@ -1686,7 +1693,7 @@ AP4_CencTrackDecrypter::Create(const unsigned char*                        key,
     }
 
     // instantiate the object
-    decrypter = new AP4_CencTrackDecrypter(sample_descriptions,
+    decrypter = new AP4_CencTrackDecrypter(trak, trex, sample_descriptions,
                                            sample_entries, 
                                            sample_descriptions[0]->GetOriginalFormat());
     return AP4_SUCCESS;
@@ -1695,9 +1702,11 @@ AP4_CencTrackDecrypter::Create(const unsigned char*                        key,
 /*----------------------------------------------------------------------
 |   AP4_CencTrackDecrypter::AP4_CencTrackDecrypter
 +---------------------------------------------------------------------*/
-AP4_CencTrackDecrypter::AP4_CencTrackDecrypter(AP4_Array<AP4_ProtectedSampleDescription*>& sample_descriptions,
+AP4_CencTrackDecrypter::AP4_CencTrackDecrypter(AP4_TrakAtom* trak, AP4_TrexAtom* trex,
+												AP4_Array<AP4_ProtectedSampleDescription*>& sample_descriptions,
                                                AP4_Array<AP4_SampleEntry*>&                sample_entries,
                                                AP4_UI32                                    original_format) :
+	AP4_Processor::TrackHandler(trak, trex),
     m_OriginalFormat(original_format)
 {
     for (unsigned int i=0; i<sample_descriptions.ItemCount(); i++) {
@@ -1825,7 +1834,7 @@ AP4_CencDecryptingProcessor::AP4_CencDecryptingProcessor(const AP4_ProtectionKey
 |   AP4_CencDecryptingProcessor:CreateTrackHandler
 +---------------------------------------------------------------------*/
 AP4_Processor::TrackHandler* 
-AP4_CencDecryptingProcessor::CreateTrackHandler(AP4_TrakAtom* trak)
+AP4_CencDecryptingProcessor::CreateTrackHandler(AP4_TrakAtom* trak, AP4_TrexAtom* trex)
 {
     // find the stsd atom
     AP4_StsdAtom* stsd = AP4_DYNAMIC_CAST(AP4_StsdAtom, trak->FindChild("mdia/minf/stbl/stsd"));
@@ -1857,7 +1866,7 @@ AP4_CencDecryptingProcessor::CreateTrackHandler(AP4_TrakAtom* trak)
     const AP4_DataBuffer* key = m_KeyMap->GetKey(trak->GetId());
     if (key) {
         AP4_CencTrackDecrypter* handler = NULL;
-        AP4_Result result = AP4_CencTrackDecrypter::Create(key->GetData(), 
+        AP4_Result result = AP4_CencTrackDecrypter::Create(trak, trex, key->GetData(), 
                                                            key->GetDataSize(), 
                                                            sample_descs, 
                                                            sample_entries, 
@@ -1882,12 +1891,12 @@ AP4_CencDecryptingProcessor::CreateFragmentHandler(AP4_TrakAtom*    /*trak*/,
     // find the matching track handler to get to the track sample description
     const AP4_DataBuffer* key = NULL;
     AP4_ProtectedSampleDescription* sample_description = NULL;
-    for (unsigned int i=0; i<m_TrackIds.ItemCount(); i++) {
+    for (unsigned int i=0; i<m_TrackData.ItemCount(); i++) {
         AP4_TfhdAtom* tfhd = AP4_DYNAMIC_CAST(AP4_TfhdAtom, traf->GetChild(AP4_ATOM_TYPE_TFHD));
-        if (tfhd && m_TrackIds[i] == tfhd->GetTrackId()) {
+		if (tfhd && m_TrackData[i].new_id == tfhd->GetTrackId()) {
             // look for the Track Encryption Box
             AP4_CencTrackDecrypter* track_decrypter = 
-                AP4_DYNAMIC_CAST(AP4_CencTrackDecrypter, m_TrackHandlers[i]);
+				AP4_DYNAMIC_CAST(AP4_CencTrackDecrypter, m_TrackData[i].track_handler);
             if (track_decrypter) {
                 unsigned int index = trex->GetDefaultSampleDescriptionIndex();
                 unsigned int tfhd_flags = tfhd->GetFlags();

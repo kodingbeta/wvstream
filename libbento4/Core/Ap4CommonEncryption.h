@@ -460,7 +460,7 @@ public:
     virtual AP4_Result Initialize(AP4_AtomParent&   top_level,
                                   AP4_ByteStream&   stream,
                                   AP4_Processor::ProgressListener* listener = NULL);
-    virtual AP4_Processor::TrackHandler*    CreateTrackHandler(AP4_TrakAtom* trak);
+	virtual AP4_Processor::TrackHandler*    CreateTrackHandler(AP4_TrakAtom* trak, AP4_TrexAtom* trex);
     virtual AP4_Processor::FragmentHandler* CreateFragmentHandler(AP4_TrakAtom*      trak,
                                                                   AP4_TrexAtom*      trex,
                                                                   AP4_ContainerAtom* traf,
@@ -489,7 +489,7 @@ public:
 								AP4_CencSingleSampleDecrypter *cenc_singlesample_decrypter = NULL);
 
     // AP4_Processor methods
-    virtual AP4_Processor::TrackHandler*    CreateTrackHandler(AP4_TrakAtom* trak);
+	virtual AP4_Processor::TrackHandler*    CreateTrackHandler(AP4_TrakAtom* trak, AP4_TrexAtom* trex);
     virtual AP4_Processor::FragmentHandler* CreateFragmentHandler(AP4_TrakAtom*      trak,
                                                                   AP4_TrexAtom*      trex,
                                                                   AP4_ContainerAtom* traf,

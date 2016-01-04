@@ -111,16 +111,19 @@ AP4_MoovAtom::AdjustChunkOffsets(AP4_SI64 offset)
 |   AP4_MoovAtom::AddTrakAtoms
 +---------------------------------------------------------------------*/
 AP4_Result
-AP4_MoovAtom::AddTrakAtoms(AP4_List<AP4_TrakAtom>& atoms)
+AP4_MoovAtom::AddTrakAtoms(AP4_List<AP4_TrakAtom>& atoms, AP4_List<AP4_TrakAtom>::Item* &first_item)
 {
 	//find the insert position (behind last existing track)
 	int current=0, insertPos = GetChildren().ItemCount();
 	for (AP4_List<AP4_Atom>::Item* item = GetChildren().FirstItem(); item; item = item->GetNext(), ++current)
 		if (item->GetData()->GetType() == AP4_ATOM_TYPE_TRAK)
-			insertPos = current+1;
-
+			insertPos = current + 1;
+	current = m_TrakAtoms.ItemCount();
 	for (AP4_List<AP4_TrakAtom>::Item *item(atoms.FirstItem()); item; item = item->GetNext())
 		AddChild(AP4_DYNAMIC_CAST(AP4_Atom, item->GetData())->Clone(),insertPos++);
+
+	for (first_item = m_TrakAtoms.FirstItem(); current; first_item = first_item->GetNext(), --current);
+
 	return AP4_SUCCESS;
 }
 

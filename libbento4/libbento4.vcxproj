@@ -188,6 +188,7 @@
     <ClInclude Include="Core\Ap4TimsAtom.h" />
     <ClInclude Include="Core\Ap4TkhdAtom.h" />
     <ClInclude Include="Core\Ap4Track.h" />
+    <ClInclude Include="Core\Ap4TrafAtom.h" />
     <ClInclude Include="Core\Ap4TrakAtom.h" />
     <ClInclude Include="Core\Ap4TrefTypeAtom.h" />
     <ClInclude Include="Core\Ap4TrexAtom.h" />
@@ -315,6 +316,7 @@
     <ClCompile Include="Core\Ap4TimsAtom.cpp" />
     <ClCompile Include="Core\Ap4TkhdAtom.cpp" />
     <ClCompile Include="Core\Ap4Track.cpp" />
+    <ClCompile Include="Core\AP4TrafAtom.cpp" />
     <ClCompile Include="Core\Ap4TrakAtom.cpp" />
     <ClCompile Include="Core\Ap4TrefTypeAtom.cpp" />
     <ClCompile Include="Core\Ap4TrexAtom.cpp" />

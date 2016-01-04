@@ -62,7 +62,7 @@ public:
     AP4_List<AP4_TrakAtom>& GetTrakAtoms() {
         return m_TrakAtoms;
     }
-	AP4_Result AddTrakAtoms(AP4_List<AP4_TrakAtom>& atoms);
+	AP4_Result AddTrakAtoms(AP4_List<AP4_TrakAtom>& atoms, AP4_List<AP4_TrakAtom>::Item* &first_item);
 
 	AP4_List<AP4_PsshAtom>& GetPsshAtoms() {
 		return m_PsshAtoms;

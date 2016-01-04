@@ -1,4 +1,4 @@
-libwvstream/*.dll
+application/*.dll
 *.sdf
 *.suo
 *.opensdf
@@ -7,3 +7,4 @@ Debug/
 */Debug/
 Release/
 */Release/
+license.txt
