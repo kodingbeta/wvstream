@@ -148,13 +148,19 @@ void CdmAdapter::UpdateSession(uint32_t promise_id,
 	const uint8_t* response,
 	uint32_t response_size)
 {
-  cdm_->UpdateSession(promise_id, session_id, session_id_size,
+	license_ = std::string((const char*)response, response_size);
+	cdm_->UpdateSession(promise_id, session_id, session_id_size,
                       response, response_size);
 }
 
 void CdmAdapter::UpdateSession(const uint8_t* response, uint32_t response_size)
 {
 	UpdateSession(2, session_id_.c_str(), session_id_.size(), response, response_size);
+}
+
+void CdmAdapter::UpdateSession()
+{
+	UpdateSession((const uint8_t*)license_.c_str(), license_.size());
 }
 
 void CdmAdapter::CloseSession(uint32_t promise_id,
@@ -333,7 +339,7 @@ void CdmAdapter::EnableOutputProtection(uint32_t desired_protection_mask)
 
 void CdmAdapter::QueryOutputProtectionStatus()
 {
-  cdm_->OnQueryOutputProtectionStatus(cdm::kQuerySucceeded, cdm::kLinkTypeInternal, cdm::kProtectionHDCP);
+	cdm_->OnQueryOutputProtectionStatus(cdm::kQuerySucceeded, cdm::kLinkTypeInternal, cdm::kProtectionHDCP);
 }
 
 void CdmAdapter::OnDeferredInitializationDone(cdm::StreamType stream_type,

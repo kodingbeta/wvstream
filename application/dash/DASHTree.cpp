@@ -52,13 +52,27 @@ start(void *data, const char *el, const char **attr)
 						DASHTree::Segment seg;
 						if (strcmp(el, "SegmentURL") == 0)
 						{
-							if (strcmp((const char*)*attr, "mediaRange") == 0)
-								seg.SetRange((const char*)*(attr + 1));
+              for (; *attr;)
+              {
+                if (strcmp((const char*)*attr, "mediaRange") == 0)
+                {
+                  seg.SetRange((const char*)*(attr + 1));
+                  break;
+                }
+                attr += 2;
+              }
 						}
 						else if (strcmp(el, "Initialization") == 0)
 						{
-							if (strcmp((const char*)*attr, "range") == 0)
-								seg.SetRange((const char*)*(attr + 1));
+              for (; *attr;)
+              {
+                if (strcmp((const char*)*attr, "range") == 0)
+                {
+                  seg.SetRange((const char*)*(attr + 1));
+                  break;
+                }
+                attr += 2;
+              }
 							dash->current_representation_->hasInitialization_ = true;
 						}
 						else
@@ -129,7 +143,6 @@ start(void *data, const char *el, const char **attr)
 				}
 				else if (strcmp(el, "ContentProtection") == 0)
 				{
-					dash->has_protection_ = true;
 					dash->strXMLText_.clear();
 					bool wvfound(false);
 					for (; *attr;)
@@ -151,7 +164,6 @@ start(void *data, const char *el, const char **attr)
 				dash->current_adaptationset_ = new DASHTree::AdaptationSet();
 				dash->current_period_->adaptationSets_.push_back(dash->current_adaptationset_);
 				dash->adp_pssh_.clear();
-				dash->has_protection_ = false;
 				for (; *attr;)
 				{
 					if (strcmp((const char*)*attr, "contentType") == 0)
@@ -250,27 +262,29 @@ end(void *data, const char *el)
 					if (strcmp(el, "SegmentDurations") == 0)
 						dash->currentNode_ &= ~DASHTree::MPDNODE_SEGMENTDURATIONS;
 				}
-				else if (dash->currentNode_ & DASHTree::MPDNODE_CONTENTPROTECTION)
-				{
-					if (dash->currentNode_ & DASHTree::MPDNODE_PSSH)
-					{
-						if (strcmp(el, "cenc:pssh") == 0)
-						{
-							dash->adp_pssh_ = dash->strXMLText_;
-							dash->currentNode_ &= ~DASHTree::MPDNODE_PSSH;
-						}
-					} else if (strcmp(el, "ContentProtection") == 0)
-						dash->currentNode_ &= ~DASHTree::MPDNODE_CONTENTPROTECTION;
-				}
+        else if (dash->currentNode_ & DASHTree::MPDNODE_CONTENTPROTECTION)
+        {
+          if (dash->currentNode_ & DASHTree::MPDNODE_PSSH)
+          {
+            if (strcmp(el, "cenc:pssh") == 0)
+            {
+              dash->adp_pssh_ = dash->strXMLText_;
+              dash->currentNode_ &= ~DASHTree::MPDNODE_PSSH;
+            }
+          }
+          else if (strcmp(el, "ContentProtection") == 0)
+          {
+            if (dash->adp_pssh_.empty())
+              dash->adp_pssh_ = "FILE";
+            dash->currentNode_ &= ~DASHTree::MPDNODE_CONTENTPROTECTION;
+          }
+        }
 				else if (strcmp(el, "AdaptationSet") == 0)
 				{
-					if (dash->has_protection_)
-					{
-						if (dash->adp_pssh_.empty() || (!dash->pssh_.empty() && dash->adp_pssh_ != dash->pssh_))
-							dash->current_period_->adaptationSets_.pop_back();
-						else
-							dash->pssh_ = dash->adp_pssh_;
-					}
+          if (!dash->pssh_.empty() && dash->adp_pssh_ != dash->pssh_)
+					  dash->current_period_->adaptationSets_.pop_back();
+					else
+						dash->pssh_ = dash->adp_pssh_;
 					dash->currentNode_ &= ~DASHTree::MPDNODE_ADAPTIONSET;
 				}
 			}

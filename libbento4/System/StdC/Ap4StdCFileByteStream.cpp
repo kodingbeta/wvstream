@@ -317,7 +317,10 @@ AP4_Result
 AP4_StdcFileByteStream::Flush()
 {
     int ret_val = fflush(m_File);
-    return (ret_val > 0) ? AP4_FAILURE: AP4_SUCCESS;
+	AP4_Result result((ret_val > 0) ? AP4_FAILURE : AP4_SUCCESS);
+	if (AP4_SUCCEEDED(result) && GetObserver())
+		return GetObserver()->OnFlush(this);
+	return result;
 }
 
 /*----------------------------------------------------------------------

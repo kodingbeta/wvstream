@@ -45,6 +45,8 @@ class CdmAdapter : NON_EXPORTED_BASE(public cdm::Host_8)
 
 	void UpdateSession(const uint8_t* response,
 		uint32_t response_size);
+	
+	void UpdateSession();
 
 	void CloseSession(uint32_t promise_id,
 		const char* session_id,
@@ -163,6 +165,7 @@ private:
 
   std::string session_id_;
   std::string message_;
+  std::string license_;
   std::string usable_key_id_;
 
   cdm::MessageType message_type_;

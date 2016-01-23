@@ -44,6 +44,7 @@
 #include "Ap4TrexAtom.h"
 #include "Ap4TkhdAtom.h"
 #include "Ap4SidxAtom.h"
+#include "Ap4MehdAtom.h"
 #include "Ap4TrafAtom.h"
 #include "Ap4DataBuffer.h"
 #include "Ap4Debug.h"
@@ -152,7 +153,7 @@ AP4_Processor::ProcessFragment( AP4_ContainerAtom*		    moof,
     AP4_Sample         sample;
     AP4_DataBuffer     sample_data_in;
     AP4_DataBuffer     sample_data_out;
-    AP4_Result         result;
+    AP4_Result         result = AP4_SUCCESS;
         
     // parse the moof
     //AP4_MovieFragment* fragment = new AP4_MovieFragment(moof);
@@ -191,7 +192,8 @@ AP4_Processor::ProcessFragment( AP4_ContainerAtom*		    moof,
 		// let the handler look at the samples before we process them
 		if (handler)
 			result = handler->PrepareForSamples(sample_table);
-		if (AP4_FAILED(result)) return result;
+		if (AP4_FAILED(result))
+			return result;
 	}
              
 	output.Buffer();
@@ -852,6 +854,12 @@ AP4_Processor::MuxStream(
 				if (!mvex)
 					return AP4_ERROR_INVALID_FORMAT;
 				
+				if (!item->GetData()->GetDuration())
+				{
+					AP4_MehdAtom *mehd(AP4_DYNAMIC_CAST(AP4_MehdAtom, mvex->GetChild(AP4_ATOM_TYPE_MEHD, 0)));
+					item->GetData()->SetDuration(mehd? mehd->GetDuration():0);
+				}
+				
 				AP4_TrexAtom *trex(NULL);
 				unsigned int index(0);
 				for (; !trex && (trex = AP4_DYNAMIC_CAST(AP4_TrexAtom, mvex->GetChild(AP4_ATOM_TYPE_TREX, index++)));)
@@ -878,6 +886,9 @@ AP4_Processor::MuxStream(
 		}
 		// We don't need the other moovs anymore.....
 		moov.SetItemCount(1);
+
+		AP4_MvhdAtom *mvhd(AP4_DYNAMIC_CAST(AP4_MvhdAtom, moov[0]->GetChild(AP4_ATOM_TYPE_MVHD, 0)));
+		mvhd->SetDuration(143820677);
 
 		// finalize the processor
 		Finalize(top_level);
@@ -934,7 +945,7 @@ AP4_Processor::MuxStream(
 			if (!moof)
 				break;
 			
-			if (AP4_FAILED(ProcessFragment(moof, NULL, 0, output, moof_positions, mdat_positions)))
+			if (AP4_FAILED(result = ProcessFragment(moof, NULL, 0, output, moof_positions, mdat_positions)))
 				return result;
 			
 			delete moof;
@@ -942,8 +953,6 @@ AP4_Processor::MuxStream(
 		}
 
 		// cleanup
-		for (AP4_Ordinal i = 0; i < m_TrackData.ItemCount(); ++i)
-			delete m_TrackData[i].track_handler;
 		m_TrackData.Clear();
 		m_StreamData.Clear();
 	}

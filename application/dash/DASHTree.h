@@ -24,7 +24,8 @@ namespace dash
 			NOTYPE,
 			VIDEO,
 			AUDIO,
-			TEXT
+			TEXT,
+			STREAM_TYPE_COUNT
 		};
 		
 		// Node definition
@@ -60,6 +61,10 @@ namespace dash
 			{
 				return pos < segments_.size() ? &segments_[pos] : 0;
 			};
+			const uint32_t get_segment_pos(const Segment *segment)const
+			{
+				return segment ? segment -&segments_[0] : 0;
+			}
 		}*current_representation_;
 
 		struct AdaptationSet
@@ -108,7 +113,6 @@ namespace dash
 			MPDNODE_PSSH = 1 << 12
 		};
 		std::string strXMLText_, adp_pssh_;
-		bool has_protection_;
 
 		DASHTree();
 		~DASHTree();

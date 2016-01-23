@@ -15,6 +15,7 @@
 #include <iostream>
 #include <thread>
 #include <string.h>
+#include <sstream>
 
 #include "dash/DASHTree.h"
 #include "dash/DASHStream.h"
@@ -125,7 +126,13 @@ AP4_Result WV_CencSingleSampleDecrypter::DecryptSampleData(
 	// the output has the same size as the input
 	data_out.SetDataSize(data_in.GetDataSize());
 
-	// check input parameters
+  if (!wv_adapter)
+  {
+    data_out.SetData(data_in.GetData(), data_in.GetDataSize());
+    return AP4_SUCCESS;
+  }
+  
+  // check input parameters
 	if (iv == NULL) return AP4_ERROR_INVALID_PARAMETERS;
 	if (subsample_count) {
 		if (bytes_of_cleartext_data == NULL || bytes_of_encrypted_data == NULL) {
@@ -290,7 +297,10 @@ public:
 	{
 		buffer_start_ = ~0;
 		position_ -= buffer_.size();
-		return Write(&buffer_[0], buffer_.size());
+		AP4_Result result = Write(&buffer_[0], buffer_.size());
+		if (AP4_SUCCEEDED(result) && GetObserver())
+			return GetObserver()->OnFlush(this);
+		return result;
 	}
 	// AP4_Referenceable methods
 	void AddReference() override {};
@@ -307,17 +317,22 @@ protected:
 /*******************************************************
 Main class Session
 ********************************************************/
-class Session
+class Session : public dash::DASHStreamObserver, public AP4_ByteStreamObserver
 {
 public:
 	Session(uint32_t session_id, const char *mpdURL, const char *licenseURL);
 	Session(uint32_t session_id, const char *encoded);
 	~Session();
 	uint32_t GetSessionId(){ return session_id_; };
-	bool initialize();
+  bool setup_widevine(const uint8_t *init_data, const unsigned int init_data_size);
+  bool initialize();
 	void SetStreamProperties(uint16_t width, uint16_t height, const char* language, uint32_t maxBitPS, bool allow_ec_3);
 	bool play(int socket_desc = 0, AP4_Position byteOffset=0);
 	void stop();
+	//Override from dash::DASHStreamObserver
+	void dash::DASHStreamObserver::OnStreamChange(dash::DASHStream *stream, uint32_t segment)override;
+	//Override from AP4SocketStreamObserver
+	AP4_Result AP4_ByteStreamObserver::OnFlush(AP4_ByteStream *stream)override;
 
 private:
 	void thread_play(AP4_Position byteOffset);
@@ -337,10 +352,13 @@ private:
 
 	uint16_t width_, height_;
 	std::string language_;
-	uint32_t max_bandwidth_;
+	uint32_t fixed_bandwidth_;
 
 	AP4_ProtectionKeyMap key_map_;
 	AP4_Processor *processor_;
+	
+	uint32_t current_segment_[dash::DASHTree::STREAM_TYPE_COUNT];
+	bool stream_changed_;
 
 #ifdef SEPARATE_STREAMS
 	AP4_ByteStream *video_output_;
@@ -361,13 +379,14 @@ Session::Session(uint32_t session_id, const char *mpdURL, const char *licenseURL
 	, width_(1280)
 	, height_(720)
 	, language_("de")
-	, max_bandwidth_(0)
+	, fixed_bandwidth_(0)
 	, video_(dashtree_, dash::DASHTree::VIDEO)
 	, audio_(dashtree_, dash::DASHTree::AUDIO)
 	, wvadapter_(NULL)
 	, video_input_(NULL)
 	, audio_input_(NULL)
 	, processor_(NULL)
+	, stream_changed_(false)
 #ifdef SEPARATE_STREAMS
 	, video_output(NULL)
 	, audio_output(NULL)
@@ -378,6 +397,8 @@ Session::Session(uint32_t session_id, const char *mpdURL, const char *licenseURL
 	, socket_desc_(0)
 #endif
 {
+	video_.set_observer(this);
+	audio_.set_observer(this);
 	// create a key map object to hold keys
 	key_map_.SetKey(1, reinterpret_cast<const AP4_UI08 *>("WIDEVINE"), 8); //Add a dummy key for track 1 (audio)
 	key_map_.SetKey(2, reinterpret_cast<const AP4_UI08 *>("WIDEVINE"), 8); //Add a dummy key for track 2 (video)
@@ -431,6 +452,117 @@ static size_t write_license(void *buffer, size_t size, size_t nmemb, void *dest)
 }
 
 /*----------------------------------------------------------------------
+| setup_widevine
++ -------------------------------------------------------------------- - */
+
+bool Session::setup_widevine(const uint8_t *init_data, const unsigned int init_data_size)
+{
+
+  wvadapter_ = new media::CdmAdapter("com.widevine.alpha", "widevinecdm.dll", media::CdmConfig());
+  if (!wvadapter_->valid())
+  {
+    std::cout << "ERROR: Unable to load widevine shared library" << std::endl;
+    return false;
+  }
+
+  if (init_data_size > 256)
+  {
+    std::cout << "ERROR: init_data with length: " << init_data_size << " seems not to be cenc init data!" << std::endl;
+    return false;
+  }
+
+  // This will request a new session and initializes session_id and message members in cdm_adapter.
+  // message will be used to create a license request in the step after CreateSession call.
+  // Initialization data is the widevine cdm pssh code in google proto style found in mpd schemeIdUri
+  unsigned int buf_size = 32 + init_data_size;
+  uint8_t buf[1024] = { 0x00, 0x00, 0x00, 0x63, 0x70, 0x73, 0x73, 0x68, 0x00, 0x00, 0x00, 0x00, 0xed, 0xef, 0x8b, 0xa9,
+    0x79, 0xd6, 0x4a, 0xce, 0xa3, 0xc8, 0x27, 0xdc, 0xd5, 0x1d, 0x21, 0xed, 0x00, 0x00, 0x00, 0x43 };
+  
+  memcpy(&buf[32], init_data, init_data_size);
+
+  wvadapter_->CreateSessionAndGenerateRequest(0, cdm::SessionType::kTemporary, cdm::InitDataType::kCenc, buf, buf_size);
+
+  if (wvadapter_->SessionValid())
+  {
+    std::string license, challenge(b64_encode(wvadapter_->GetMessage(), wvadapter_->GetMessageSize(), true));
+    challenge = "widevine2Challenge=" + challenge;
+    challenge += "&includeHdcpTestKeyInLicense=true";
+
+    static const unsigned int numDefaultHeaders(6);
+    static const char* licHeaders[numDefaultHeaders] = {
+      "Accept: application/json",
+      "Pragma: no-cache",
+      "Cache-Control: no-cache",
+      "Content-Type: application/x-www-form-urlencoded",
+      "Accept-Encoding: gzip, deflate",
+      "EXPECT:"
+    };
+
+    // Get the license
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    struct curl_slist *headerlist = NULL;
+    for (unsigned int i(0); i < numDefaultHeaders; ++i)
+      headerlist = curl_slist_append(headerlist, licHeaders[i]);
+
+    CURL *curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, wvLicenseURL_.c_str());
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headerlist);
+    /* Set the form info */
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, challenge.c_str());
+    /* Define our callback to get called when there's data to be written */
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_license);
+    /* Set a pointer to our struct to pass to the callback */
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &license);
+    /* Disable security checks here */
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    /* Automaticlly decompress gzipped responses */
+    curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "gzip");
+    CURLcode res = curl_easy_perform(curl);
+
+    if (res != CURLE_OK)
+    {
+      stop();
+      std::cout << "ERROR: curl - license request failed (" << license << ")" << std::endl;
+      return false;
+    }
+
+    std::string::size_type licStartPos(license.find("\"license\":\""));
+    if (licStartPos == std::string::npos)
+    {
+      stop();
+      std::cout << "ERROR: license start position not found (" << license << ")" << std::endl;
+      return false;
+
+    }
+    licStartPos += 11;
+    std::string::size_type licEndPos(license.find("\",", licStartPos));
+    if (licEndPos == std::string::npos)
+    {
+      stop();
+      std::cout << "ERROR: license end position not found (" << license << ")" << std::endl;
+      return false;
+    }
+
+    buf_size = 1024;
+    b64_decode(license.c_str() + licStartPos, licEndPos - licStartPos, buf, buf_size);
+    wvadapter_->UpdateSession(buf, buf_size);
+
+    if (!wvadapter_->KeyIdValid())
+    {
+      stop();
+      std::cout << "INFO: License update not successful" << std::endl;
+      return false;
+    }
+    return true;
+  } else
+    std::cout << "ERROR: WV sessionrequest invalid!" << std::endl;
+  return false;
+}
+
+/*----------------------------------------------------------------------
 |   initialize
 +---------------------------------------------------------------------*/
 
@@ -453,106 +585,20 @@ bool Session::initialize()
 	}
 	std::cout << "Info: Successfully aded .mpd file, bandwidth: " << dashtree_.download_speed_ << "Bytes/s" << std::endl;
 
+  if (dashtree_.pssh_.empty() || dashtree_.pssh_ == "FILE")
+    return true;
 
-	// Currently use initialization data from mpd file.
-	// Maybe this has to fixed later (pass initdata of the lowest stream to Bento)
+  //We can use pssh data from mpd
+  
+  // This will request a new session and initializes session_id and message members in cdm_adapter.
+  // message will be used to create a license request in the step after CreateSession call.
+  // Initialization data is the widevine cdm pssh code in google proto style found in mpd schemeIdUri
+  uint8_t init_data[256];
+  unsigned int init_data_size(256);
 
-	wvadapter_ = new media::CdmAdapter("com.widevine.alpha", "widevinecdm.dll", media::CdmConfig());
-	if (!wvadapter_->valid())
-	{
-		std::cout << "ERROR: Unable to load widevine shared library" << std::endl;
-		return false;
-	}
+  b64_decode(dashtree_.pssh_.data(), dashtree_.pssh_.size(), init_data, init_data_size);
 
-	// This will request a new session and initializes session_id and message members in cdm_adapter.
-	// message will be used to create a license request in the step after CreateSession call.
-	// Initialization data is the widevine cdm pssh code in google proto style found in mpd schemeIdUri
-	uint8_t init_data[1024] = { 0x00, 0x00, 0x00, 0x63, 0x70, 0x73, 0x73, 0x68, 0x00, 0x00, 0x00, 0x00, 0xed, 0xef, 0x8b, 0xa9,
-		0x79, 0xd6, 0x4a, 0xce, 0xa3, 0xc8, 0x27, 0xdc, 0xd5, 0x1d, 0x21, 0xed, 0x00, 0x00, 0x00, 0x43};
-	
-	unsigned int init_data_size(992);
-	b64_decode(dashtree_.pssh_.data(), dashtree_.pssh_.size(), &init_data[32], init_data_size);
-
-	wvadapter_->CreateSessionAndGenerateRequest(0, cdm::SessionType::kTemporary, cdm::InitDataType::kCenc, init_data, init_data_size+32);
-
-	if (wvadapter_->SessionValid())
-	{
-#if 1
-		std::string license, challenge(b64_encode(wvadapter_->GetMessage(), wvadapter_->GetMessageSize(), true));
-		challenge = "widevine2Challenge=" + challenge;
-		challenge += "&includeHdcpTestKeyInLicense=false";
-
-		static const unsigned int numDefaultHeaders(6);
-		static const char* licHeaders[numDefaultHeaders] = {
-			"Accept: application/json",
-			"Pragma: no-cache",
-			"Cache-Control: no-cache",
-			"Content-Type: application/x-www-form-urlencoded",
-			"Accept-Encoding: gzip, deflate",
-			"EXPECT:"
-		};
-
-		// Get the license
-		curl_global_init(CURL_GLOBAL_ALL);
-
-		struct curl_slist *headerlist = NULL;
-		for (unsigned int i(0); i < numDefaultHeaders;++i)
-			headerlist = curl_slist_append(headerlist, licHeaders[i]);
-
-		CURL *curl = curl_easy_init();
-		curl_easy_setopt(curl, CURLOPT_URL, wvLicenseURL_.c_str());
-		curl_easy_setopt(curl, CURLOPT_POST, 1L);
-		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headerlist);
-		/* Set the form info */
-		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, challenge.c_str());
-		/* Define our callback to get called when there's data to be written */
-		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_license);
-		/* Set a pointer to our struct to pass to the callback */
-		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &license);
-		/* Disable security checks here */
-		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-		curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-		/* Automaticlly decompress gzipped responses */
-		curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "gzip");
-		CURLcode res = curl_easy_perform(curl);
-
-		if (res != CURLE_OK)
-		{
-			stop();
-			std::cout << "ERROR: curl - license request failed (" << license << ")" << std::endl;
-			return false;
-		}
-
-		std::string::size_type licStartPos(license.find("\"license\":\""));
-		if (licStartPos == std::string::npos)
-		{
-			stop();
-			std::cout << "ERROR: license start position not found (" << license << ")" << std::endl;
-			return false;
-
-		}
-		licStartPos += 11;
-		std::string::size_type licEndPos(license.find("\",", licStartPos));
-		if (licEndPos == std::string::npos)
-		{
-			stop();
-			std::cout << "ERROR: license end position not found (" << license << ")" << std::endl;
-			return false;
-		}
-
-		init_data_size = 1024;
-		b64_decode(license.c_str() + licStartPos, licEndPos - licStartPos, init_data, init_data_size);
-		wvadapter_->UpdateSession(init_data, init_data_size);
-
-		if (!wvadapter_->KeyIdValid())
-		{
-			stop();
-			std::cout << "INFO: License update not successful" << std::endl;
-			return false;
-		}
-#endif
-	}
-	return true;
+  return  setup_widevine(init_data, init_data_size);
 }
 
 void Session::thread_play(AP4_Position byteOffset)
@@ -560,23 +606,29 @@ void Session::thread_play(AP4_Position byteOffset)
 #if !defined(SEPARATE_STREAMS) && !defined(MUXED_STREAM)
 	std::cout << "INFO: thread for session-id: " << session_id_ << " started" << std::endl;
 	AP4_SockStream sock_output(socket_desc_, byteOffset);
-	std::string ret("HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\n\r\n");
+	sock_output.SetObserver(dynamic_cast<AP4_ByteStreamObserver*>(this));
+	std::string ret("HTTP/1.1 200 OK\r\nContent-Type: video/quicktime\r\n\r\n");
 	send(socket_desc_, ret.c_str(), ret.size(), 0);
 	AP4_Array<AP4_ByteStream*> streams;
 	streams.SetItemCount(2);
 	streams[0] = audio_input_;
 	streams[1] = video_input_;
 	
+	AP4_Result result = AP4_ERROR_INVALID_FORMAT;
+	do {
+		if (AP4_SUCCEEDED(processor_->Mux(streams, sock_output, 1, NULL)))
+		{
+			//Skip to the first MOOF Segments
+			audio_.start_stream(current_segment_[dash::DASHTree::AUDIO]);
+			video_.start_stream(current_segment_[dash::DASHTree::VIDEO]);
+			result = processor_->Mux(streams, sock_output, 2, NULL);
+		}
+	} while (result == AP4_ERROR_STREAM_CHANGED);
 	
-	if (AP4_SUCCEEDED(processor_->Mux(streams, sock_output, 1, NULL)))
-	{
-		//Skip to the first MOOF Segments
-		audio_.start_stream(0);
-		video_.start_stream(0);
-		processor_->Mux(streams, sock_output, 2, NULL);
-	}
-	
-	closesocket(socket_desc_);
+  audio_.clear();
+  video_.clear();
+  
+  closesocket(socket_desc_);
 	socket_desc_ = 0;
 	std::cout << "INFO: thread for session-id: " << session_id_ << " terminated" << std::endl;
 #endif
@@ -587,30 +639,50 @@ bool Session::play(int socket_desc, AP4_Position byteOffset)
 {
 	stop();
 
-	if (!video_.prepare_stream(width_, height_, 0, max_bandwidth_))
+	if (!video_.prepare_stream(width_, height_, 0, fixed_bandwidth_))
 	{
 		std::cout << "ERROR: Could not prepare video stream" << std::endl;
 		return false;
 	}
-	std::cout << "Info: video representation: " << video_.getRepresentation()->url_ << "bandwidth: " << video_.getRepresentation()->bandwidth_ << std::endl;
-
 	video_input_ = new AP4_DASHStream(&video_);
-	//video_input can be used to fetch initdata for license handling now.....
-
-	if (!audio_.prepare_stream(0, 0, language_.c_str(), max_bandwidth_))
+	
+  //if no pssh data was in .mpd file but we have encrypted data, take it from video file
+  if (!wvadapter_ && dashtree_.pssh_ == "FILE")
+  {
+    AP4_File input(*video_input_, AP4_DefaultAtomFactory::Instance, true);
+    AP4_Movie* movie = input.GetMovie();
+    AP4_Array<AP4_PsshAtom*>& pssh = movie->GetPsshAtoms();
+    
+    unsigned char key_system[16];
+    AP4_ParseHex("edef8ba979d64acea3c827dcd51d21ed", key_system, 16);
+    
+    std::string license;
+    for (unsigned int i = 0; license.empty() && i < pssh.ItemCount(); i++)
+      if (memcmp(pssh[i]->GetSystemId(), key_system, 16) == 0)
+        license = std::string((const char *)pssh[i]->GetData().GetData(), pssh[i]->GetData().GetDataSize());
+    if (license.empty())
+    {
+      std::cout << "ERROR: Could not extract license from video stream" << std::endl;
+      return false;
+    }
+    if (!setup_widevine((const uint8_t*)license.data(), license.size()))
+      return false;
+    video_input_->Seek(0);
+  }
+ 
+	if (!audio_.prepare_stream(0, 0, language_.c_str(), fixed_bandwidth_))
 	{
 		std::cout << "ERROR: Could not prepare audio stream" << std::endl;
 		return false;
 	}
-	std::cout << "Info: audio representation: " << audio_.getRepresentation()->url_ << "bandwidth: " << audio_.getRepresentation()->bandwidth_ << std::endl;
-
 	audio_input_ = new AP4_DASHStream(&audio_);
 
 #ifdef SEPARATE_STREAMS
-	AP4_FileByteStream::Create("C:\\Temp\\video.mp4", AP4_FileByteStream::STREAM_MODE_WRITE, video_output_);
-	AP4_FileByteStream::Create("C:\\Temp\\audio.mp4", AP4_FileByteStream::STREAM_MODE_WRITE, audio_output_);
+	AP4_FileByteStream::Create("C:\\Temp\\video.mov", AP4_FileByteStream::STREAM_MODE_WRITE, video_output_);
+	AP4_FileByteStream::Create("C:\\Temp\\audio.mov", AP4_FileByteStream::STREAM_MODE_WRITE, audio_output_);
 #elif MUXED_STREAM
-	AP4_FileByteStream::Create("C:\\Temp\\muxed.mp4", AP4_FileByteStream::STREAM_MODE_WRITE, muxed_output_);
+	AP4_FileByteStream::Create("C:\\Temp\\muxed.mov", AP4_FileByteStream::STREAM_MODE_WRITE, muxed_output_);
+	muxed_output_->SetObserver(this);
 #endif
 
 	processor_ = new AP4_CencDecryptingProcessor(&key_map_, NULL, new WV_CencSingleSampleDecrypter(wvadapter_));
@@ -625,13 +697,24 @@ bool Session::play(int socket_desc, AP4_Position byteOffset)
 	streams[0] = audio_input_;
 	streams[1] = video_input_;
 
-	if (AP4_SUCCEEDED(result = processor_->Mux(streams, *muxed_output_, 1, NULL)))
-	{
-		//Skip to the first MOOF Segments
-		audio_.start_stream(0);
-		video_.start_stream(0);
-		result = processor_->Mux(streams, *muxed_output_, 2, NULL);
-	}
+	do {
+		if (AP4_SUCCEEDED(result = processor_->Mux(streams, *muxed_output_, 1, NULL)))
+		{
+			//Skip to the first MOOF Segments
+			audio_.start_stream(current_segment_[dash::DASHTree::AUDIO]);
+			video_.start_stream(current_segment_[dash::DASHTree::VIDEO]);
+			result = processor_->Mux(streams, *muxed_output_, 2, NULL);
+		}
+	} while (result == AP4_ERROR_STREAM_CHANGED);
+	
+	video_.set_bandwidth(1);
+	video_.select_stream(true);
+	audio_.select_stream(true);
+	processor_->Mux(streams, *muxed_output_, 1, NULL);
+	audio_.start_stream(current_segment_[dash::DASHTree::AUDIO]);
+	video_.start_stream(current_segment_[dash::DASHTree::VIDEO]);
+	result = processor_->Mux(streams, *muxed_output_, 2, NULL);
+
 #else
 	socket_desc_ = socket_desc;
 	thread_ = new std::thread(&Session::thread_play, this, byteOffset);
@@ -671,8 +754,36 @@ void Session::stop()
 	delete muxed_output_;
 	muxed_output_ = 0;
 #endif
+	memset(current_segment_, 0, sizeof(current_segment_));
 }
 
+void Session::OnStreamChange(dash::DASHStream *stream, uint32_t segment)
+{
+	std::cout << "Info: ";
+	stream->info(std::cout);
+	std::cout << "last segment:" << segment <<std::endl;
+	current_segment_[stream->get_type()] = segment;
+}
+
+AP4_Result Session::OnFlush(AP4_ByteStream *stream)
+{
+	/* OnFlush is called after each MP4 MOOF atom (= stream segment)
+	   Because it is called before next segment is accessed, Its a good place to handle stream changes
+	- call DASHStream::select_stream(noforce) for each stream
+	- DASHStream::select_stream will call this->OnStreamChange() wich stores the current segment
+	- if there was a change -> call DASHStream::select_stream(force) to prepare every stream
+	- if Mux(2) returns EOS and we have changes we will continue in thread_play
+	*/
+#if MUXED_STREAM
+  static uint32_t counter(0);
+	if (++counter == 10)
+	{
+		//counter = 0;
+		return AP4_ERROR_EOS;
+	}
+#endif
+  return AP4_SUCCESS;
+}
 
 #if !defined SEPARATE_STREAMS && !defined MUXED_STREAM 
 
@@ -746,7 +857,11 @@ int main(int argc, char *argv[])
 				{
 					std::cout << "INFO: new session created: " << sessionId << std::endl;
 					session_stack.push_back(session);
-				}
+          std::stringstream cmd;
+          cmd << "HTTP/1.1 200 OK\r\nSession-Id: " << sessionId << "\r\n\r\n";
+          send(client_sock, cmd.str().c_str(), cmd.str().size(), 0);
+          closesocket(client_sock);
+        }
 				else {
 					delete session;
 					std::cout << "ERROR: Unable to create / initialize session!" << std::endl;
@@ -778,7 +893,7 @@ int main(int argc, char *argv[])
 			}
 			else
 			{
-				strMessage = "HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\n\r\n";
+				strMessage = "HTTP/1.1 200 OK\r\nContent-Type: video/quicktime\r\n\r\n";
 				send(client_sock, strMessage.c_str(), strMessage.size(), 0);
 				closesocket(client_sock);
 				goto success;
@@ -804,8 +919,8 @@ success:;
 #else
 int main()
 {
-	const char *lic = "TBD";
-	const char *mpd = "TBD";
+	//const char *lic = "TBD";
+	//const char *mpd = "TBD";
 
 	Session s(0, mpd, lic);
 	//s.SetStreamProperties(,,,,,,); //use defaults

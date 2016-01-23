@@ -41,6 +41,13 @@
 |   class references
 +---------------------------------------------------------------------*/
 class AP4_String;
+class AP4_ByteStream;
+
+class AP4_ByteStreamObserver
+{
+public:
+	virtual AP4_Result OnFlush(AP4_ByteStream *stream) = 0;
+};
 
 /*----------------------------------------------------------------------
 |   AP4_ByteStream
@@ -48,7 +55,10 @@ class AP4_String;
 class AP4_ByteStream : public AP4_Referenceable
 {
  public:
-    // methods
+	 AP4_ByteStream() :observer_(0){};
+	 void SetObserver(AP4_ByteStreamObserver *observer){ observer_ = observer; };
+	 AP4_ByteStreamObserver *GetObserver(){ return observer_; };
+	 // methods
     virtual AP4_Result ReadPartial(void*     buffer, 
                                    AP4_Size  bytes_to_read, 
                                    AP4_Size& bytes_read) = 0;
@@ -78,6 +88,8 @@ class AP4_ByteStream : public AP4_Referenceable
     virtual AP4_Result CopyTo(AP4_ByteStream& stream, AP4_LargeSize size);
 	virtual AP4_Result Buffer() { return AP4_SUCCESS; }
 	virtual AP4_Result Flush() { return AP4_SUCCESS; }
+private:
+	AP4_ByteStreamObserver *observer_;
 };
 
 /*----------------------------------------------------------------------
