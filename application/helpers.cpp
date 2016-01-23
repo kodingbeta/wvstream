@@ -28,15 +28,38 @@ static const BYTE from_base64[] = { 255, 255, 255, 255, 255, 255, 255, 255, 255,
 bool b64_decode(const char *in, unsigned int in_len, uint8_t *out, unsigned int &out_len)
 {
 	// Make sure string length is a multiple of 4
-	if (in_len & 3)
-		return false;
+  char *in_copy(0);
+  if (in_len > 3 && strnicmp(in + (in_len - 3), "%3D", 3)==0)
+  {
+    in_copy = (char *)malloc(in_len+1);
+    strcpy(in_copy, in);
+    in = in_copy;
+    if (in_len > 6 && strnicmp(in + (in_len - 6), "%3D", 3) == 0)
+    {
+      strcpy(in_copy + (in_len - 6), "==");
+        in_len -= 4;
+    }
+    else {
+      strcpy(in_copy + (in_len - 3), "=");
+        in_len -= 2;
+    }
+  }
+    
+  if (in_len & 3)
+  {
+    free(in_copy);
+    return false;
+  }
 
 	unsigned int new_out_len = in_len / 4 * 3;
 	if (in[in_len - 1] == '=') --new_out_len;
 	if (in[in_len - 2] == '=') --new_out_len;
 	if (new_out_len > out_len)
-		return false;
-	out_len = new_out_len;
+  {
+    free(in_copy);
+    return false;
+  }
+  out_len = new_out_len;
 
 	for (size_t i = 0; i<in_len; i += 4)
 	{
@@ -58,7 +81,8 @@ bool b64_decode(const char *in, unsigned int in_len, uint8_t *out, unsigned int 
 		if (b4[2] != 0xff) *out++ = b3[1];
 		if (b4[3] != 0xff) *out++ = b3[2];
 	}
-	return true;
+  free(in_copy);
+  return true;
 }
 
 static const char *to_base64 =

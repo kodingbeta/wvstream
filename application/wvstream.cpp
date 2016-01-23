@@ -418,8 +418,8 @@ Session::Session(uint32_t session_id, const char *encoded)
 	if (strF && strE)
 	{
 		unsigned int newLen(4096);
-		b64_decode(strF + 7, strE - strF - 7, buffer, newLen);
-		mpdFileURL_ = std::string((const char*)buffer, newLen);
+    if(b64_decode(strF + 7, strE - strF - 7, buffer, newLen))
+      mpdFileURL_ = std::string((const char*)buffer, newLen);
 	}
 	strF = strstr(encoded, "licurl=");
 	strE = strF?strchr(strF, '&'):0;
@@ -427,8 +427,8 @@ Session::Session(uint32_t session_id, const char *encoded)
 	if (strF && strE)
 	{
 		unsigned int newLen(4096);
-		b64_decode(strF + 7, strE - strF - 7, buffer, newLen);
-		wvLicenseURL_ = std::string((const char*)buffer, newLen);
+		if(b64_decode(strF + 7, strE - strF - 7, buffer, newLen))
+		  wvLicenseURL_ = std::string((const char*)buffer, newLen);
 	}
 }
 
