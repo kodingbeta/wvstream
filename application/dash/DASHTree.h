@@ -117,7 +117,8 @@ namespace dash
 		DASHTree();
 		~DASHTree();
 		bool open(const char *url);
-		uint32_t estimate_segcount(uint32_t duration, uint32_t timescale);
+    bool has_type(StreamType t);
+    uint32_t estimate_segcount(uint32_t duration, uint32_t timescale);
 		double get_download_speed() const { return download_speed_; };
 	};
 

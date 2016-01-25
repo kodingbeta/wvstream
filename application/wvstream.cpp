@@ -578,12 +578,12 @@ bool Session::initialize()
 	}
 	dashtree_.base_url_ = std::string(mpdFileURL_.c_str(), (delim - mpdFileURL_.c_str()) + 1);
 	
-	if (!dashtree_.open(mpdFileURL_.c_str()))
+  if (!dashtree_.open(mpdFileURL_.c_str()) || !dashtree_.has_type(dash::DASHTree::VIDEO) || !dashtree_.has_type(dash::DASHTree::AUDIO))
 	{
 		std::cout << "ERROR: Could not open / parse mpdURL (" << mpdFileURL_ << ")" << std::endl;
 		return false;
 	}
-	std::cout << "Info: Successfully aded .mpd file, bandwidth: " << dashtree_.download_speed_ << "Bytes/s" << std::endl;
+  std::cout << "Info: Successfully parsed .mpd file. Download speed: " << dashtree_.download_speed_ << "Bytes/s" << std::endl;
 
   if (dashtree_.pssh_.empty() || dashtree_.pssh_ == "FILE")
     return true;
@@ -631,6 +631,25 @@ void Session::thread_play(AP4_Position byteOffset)
   closesocket(socket_desc_);
 	socket_desc_ = 0;
 	std::cout << "INFO: thread for session-id: " << session_id_ << " terminated" << std::endl;
+
+  // Send the server a message that we are ready
+  int sock = socket(AF_INET, SOCK_STREAM, 0);
+  struct sockaddr_in serv_addr;
+  struct hostent *server;
+  
+  memset(&serv_addr, 0, sizeof(serv_addr));
+  serv_addr.sin_family = AF_INET;
+  serv_addr.sin_port = htons(8888);
+  server = gethostbyname("127.0.0.1");
+  memcpy(&serv_addr.sin_addr.s_addr, server->h_addr, server->h_length);
+  
+  if (connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) ==0)
+  {
+    char buf[128];
+    sprintf(buf, "GET /close?%d HTTP/1.0\r\n\r\n", session_id_);
+    send(sock, buf, strlen(buf), 0);
+    closesocket(sock);
+  }
 #endif
 }
 
@@ -876,7 +895,7 @@ int main(int argc, char *argv[])
 						break;
 				if (b != e)
 				{
-					if (!(*b)->play(client_sock, 0))
+          if (!(*b)->play(client_sock, 0))
 						std::cout << "ERROR: Unable to play stream with session_id: " << sid << std::endl;
 					else
 					{
@@ -887,10 +906,24 @@ int main(int argc, char *argv[])
 				else
 					std::cout << "ERROR: Unable to find stream with session_id: " << sid << std::endl;
 			}
+      else if (strncmp(strMessage.c_str(), "GET /close?", 11) == 0)
+      {
+        uint32_t sid = atoi(strMessage.c_str() + 11);
+        std::vector<Session*>::iterator b(session_stack.begin()), e(session_stack.end());
+        for (; b != e; ++b)
+          if ((*b)->GetSessionId() == sid)
+            break;
+        if (b != e)
+        {
+          std::cout << "INFO: Removing session with session_id: " << sid << std::endl;
+          delete (*b);
+          session_stack.erase(b);
+        }
+      }
 			else if (strncmp(strMessage.c_str(), "HEAD", 4) != 0)
 			{
 				std::cout << "ERROR: Unknown command: " << strMessage << std::endl;
-			}
+      }
 			else
 			{
 				strMessage = "HTTP/1.1 200 OK\r\nContent-Type: video/quicktime\r\n\r\n";

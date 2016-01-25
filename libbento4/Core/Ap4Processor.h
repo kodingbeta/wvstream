@@ -302,13 +302,15 @@ protected:
     AP4_List<ExternalTrackData> m_ExternalTrackData;
 	struct PERTRACK
 	{
-		PERTRACK() :new_id(0), original_id(0), track_handler(0), streamId(0){};
+		PERTRACK() :new_id(0), original_id(0), track_handler(0), streamId(0), dts(0), timescale(1){};
 		~PERTRACK() { delete track_handler; track_handler = 0; };
 
 		AP4_UI32 new_id; //new id
 		AP4_UI32 original_id;
 		TrackHandler* track_handler;
 		AP4_Cardinal streamId;
+    AP4_UI64 dts, timescale;
+
 	};
 	AP4_Array<PERTRACK>  m_TrackData;
 

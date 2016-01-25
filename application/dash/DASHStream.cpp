@@ -141,27 +141,36 @@ bool DASHStream::select_stream(bool force)
 		bandwidth = static_cast<uint32_t>(download_speed_*(type_ == DASHTree::VIDEO ? 7.2 : 0.8)); //Bandwith split 90 / 10
 	else
 		bandwidth = static_cast<uint32_t>(bandwidth *(type_ == DASHTree::VIDEO ? 0.9 : 0.1));
+  std::string lang(language_), avail_lang;
 
-	for (std::vector<DASHTree::AdaptationSet*>::const_iterator ba(current_period_->adaptationSets_.begin()), ea(current_period_->adaptationSets_.end()); ba != ea; ++ba)
+NEXTLANG:	
+  for (std::vector<DASHTree::AdaptationSet*>::const_iterator ba(current_period_->adaptationSets_.begin()), ea(current_period_->adaptationSets_.end()); ba != ea; ++ba)
 	{
-		if ((*ba)->type_ == type_ && (language_.empty() || stricmp(language_.c_str(), (*ba)->language_.c_str()) == 0))
-		{
-			for (std::vector<DASHTree::Representation*>::const_iterator br((*ba)->repesentations_.begin()), er((*ba)->repesentations_.end()); br != er; ++br)
-			{
-				if ((*br)->width_ <= width_ && (*br)->height_ <= height_ && (*br)->bandwidth_ < bandwidth && (*br)->codecs_ != "ec-3"
-					&& (!new_rep || ((*br)->bandwidth_ > new_rep->bandwidth_)))
-				{
-					new_adp = (*ba);
-					new_rep = (*br);
-				}
-				else if (!min_rep || (*br)->bandwidth_ < min_rep->bandwidth_)
-				{
-					min_adp = (*ba);
-					min_rep = (*br);
-				}
-			}
-		}
+    if ((*ba)->type_ == type_ && (lang.empty() || stricmp(lang.c_str(), (*ba)->language_.c_str()) == 0))
+    {
+      for (std::vector<DASHTree::Representation*>::const_iterator br((*ba)->repesentations_.begin()), er((*ba)->repesentations_.end()); br != er; ++br)
+      {
+        if ((*br)->width_ <= width_ && (*br)->height_ <= height_ && (*br)->bandwidth_ < bandwidth && (*br)->codecs_ != "ec-3"
+          && (!new_rep || ((*br)->bandwidth_ > new_rep->bandwidth_)))
+        {
+          new_adp = (*ba);
+          new_rep = (*br);
+        }
+        else if (!min_rep || (*br)->bandwidth_ < min_rep->bandwidth_)
+        {
+          min_adp = (*ba);
+          min_rep = (*br);
+        }
+      }
+    }
+    else if ((*ba)->type_ == type_)
+      avail_lang = (*ba)->language_;
 	}
+  if (!new_rep && !min_rep && !avail_lang.empty())
+  {
+    lang = avail_lang;
+    goto NEXTLANG;
+  }
 
 	if (!new_rep)
 	{

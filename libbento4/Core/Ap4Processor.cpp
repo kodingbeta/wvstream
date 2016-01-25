@@ -45,6 +45,7 @@
 #include "Ap4TkhdAtom.h"
 #include "Ap4SidxAtom.h"
 #include "Ap4MehdAtom.h"
+#include "Ap4MdhdAtom.h"
 #include "Ap4TrafAtom.h"
 #include "Ap4DataBuffer.h"
 #include "Ap4Debug.h"
@@ -183,6 +184,7 @@ AP4_Processor::ProcessFragment( AP4_ContainerAtom*		    moof,
 		AP4_FragmentSampleTable* sample_table = new AP4_FragmentSampleTable(
 			traf,
 			trex,
+      traf->GetInternalTrackId(),
 			m_StreamData[track_data.streamId].stream,
 			moof_positions[traf->GetInternalTrackId()],
 			mdat_positions[traf->GetInternalTrackId()],
@@ -261,6 +263,8 @@ AP4_Processor::ProcessFragment( AP4_ContainerAtom*		    moof,
             if (AP4_FAILED(result)) return result;
             sample.ReadData(sample_data_in);
                 
+            m_TrackData[sample_tables[i]->GetInteralTrackId()].dts = sample.GetDts();
+            
             // process the sample data
             if (handler) {
                 result = handler->ProcessSample(sample_data_in, sample_data_out);
@@ -850,7 +854,12 @@ AP4_Processor::MuxStream(
 				track_data.original_id = item->GetData()->GetId();
 				item->GetData()->SetId(track_data.new_id = internal_index + 1);
 
-				AP4_ContainerAtom *mvex = AP4_DYNAMIC_CAST(AP4_ContainerAtom, moov[streamid]->GetChild(AP4_ATOM_TYPE_MVEX, 0));
+        if (AP4_MdhdAtom* mdhd = AP4_DYNAMIC_CAST(AP4_MdhdAtom, item->GetData()->FindChild("mdia/mdhd")))
+          track_data.timescale = mdhd->GetTimeScale();
+        else
+          track_data.timescale = 1;
+        
+        AP4_ContainerAtom *mvex = AP4_DYNAMIC_CAST(AP4_ContainerAtom, moov[streamid]->GetChild(AP4_ATOM_TYPE_MVEX, 0));
 				if (!mvex)
 					return AP4_ERROR_INVALID_FORMAT;
 				
@@ -916,7 +925,8 @@ AP4_Processor::MuxStream(
 			AP4_ContainerAtom *moof = NULL;
 			AP4_UI32 track_index(0);
 			
-			for (AP4_Cardinal streamid(0); streamid < input.ItemCount(); ++streamid)
+#if 0			
+      for (AP4_Cardinal streamid(0); streamid < input.ItemCount(); ++streamid)
 			{
 				AP4_Atom* atom = NULL;
 				if (AP4_SUCCEEDED(input[streamid]->Tell(stream_offset)) && AP4_SUCCEEDED(atom_factory.CreateAtomFromStream(*input[streamid], atom)))
@@ -942,6 +952,30 @@ AP4_Processor::MuxStream(
 				else
 					delete atom;
 			}
+#else
+      double mindts(9999999999.0);
+      AP4_Cardinal nextStream(~0);
+      for (AP4_Cardinal track(0); track < m_TrackData.ItemCount(); ++track)
+        if ((double)m_TrackData[track].dts / m_TrackData[track].timescale  < mindts)
+        {
+          mindts = (double)m_TrackData[track].dts / m_TrackData[track].timescale;
+          nextStream = m_TrackData[track].streamId;
+        }
+      
+      AP4_Atom* atom = NULL;
+      if (AP4_SUCCEEDED(input[nextStream]->Tell(stream_offset)) && AP4_SUCCEEDED(atom_factory.CreateAtomFromStream(*input[nextStream], atom)))
+      {
+        if (atom->GetType() != AP4_ATOM_TYPE_MOOF)
+          return AP4_ERROR_INVALID_FORMAT;
+      }
+
+      moof_positions[nextStream] = stream_offset;
+      mdat_positions[nextStream] = stream_offset + atom->GetSize() + +AP4_ATOM_HEADER_SIZE;
+
+      moof = AP4_DYNAMIC_CAST(AP4_ContainerAtom, atom);
+      NormalizeTRAF(AP4_DYNAMIC_CAST(AP4_ContainerAtom, moof), m_StreamData[nextStream].trackStart,
+        m_StreamData[nextStream].trackStart + m_StreamData[nextStream].trackCount, track_index);
+#endif
 			if (!moof)
 				break;
 			

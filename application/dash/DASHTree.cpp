@@ -177,7 +177,15 @@ start(void *data, const char *el, const char **attr)
 						dash->current_adaptationset_->mimeType_ = (const char*)*(attr + 1);
 					attr += 2;
 				}
-				dash->segcount_ = 0;
+        if (dash->current_adaptationset_->type_ == DASHTree::NOTYPE)
+        {
+          if (strncmp(dash->current_adaptationset_->mimeType_.c_str(), "video", 5) == 0)
+            dash->current_adaptationset_->type_ = DASHTree::VIDEO;
+          else if (strncmp(dash->current_adaptationset_->mimeType_.c_str(), "audio", 5) == 0)
+            dash->current_adaptationset_->type_ = DASHTree::AUDIO;
+        }
+        
+        dash->segcount_ = 0;
 				dash->currentNode_ |= DASHTree::MPDNODE_ADAPTIONSET;
 			}
 		}
@@ -377,6 +385,17 @@ bool DASHTree::open(const char *url)
 	if (res != CURLE_OK)
 		return false;
 	return true;
+}
+
+bool DASHTree::has_type(StreamType t)
+{
+  if (periods_.empty())
+    return false;
+  
+  for (std::vector<AdaptationSet*>::const_iterator b(periods_[0]->adaptationSets_.begin()), e(periods_[0]->adaptationSets_.end()); b != e; ++b)
+    if ((*b)->type_ == t)
+      return true;
+  return false;
 }
 
 uint32_t DASHTree::estimate_segcount(uint32_t duration, uint32_t timescale)

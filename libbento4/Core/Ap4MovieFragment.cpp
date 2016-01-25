@@ -154,7 +154,8 @@ AP4_MovieFragment::CreateSampleTable(AP4_MoovAtom*             moov,
     AP4_ContainerAtom* traf = NULL;
     if (AP4_SUCCEEDED(GetTrafAtom(track_id, traf))) {
         sample_table = new AP4_FragmentSampleTable(traf, 
-                                                   trex, 
+                                                   trex,
+                                                   track_id,
                                                    sample_stream,
                                                    moof_offset,
                                                    mdat_payload_offset,
