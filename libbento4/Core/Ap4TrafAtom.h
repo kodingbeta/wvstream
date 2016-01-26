@@ -57,7 +57,7 @@ public:
 	void SetInternalTrackId(AP4_UI32 id){ m_InternalTrackId = id;};
 	AP4_UI32 GetInternalTrackId()const{ return m_InternalTrackId; };
 private:
-	AP4_TrafAtom::AP4_TrafAtom(Type type);
+	AP4_TrafAtom(Type type);
 
 	AP4_TrafAtom(Type  type,
 		AP4_UI64         size,

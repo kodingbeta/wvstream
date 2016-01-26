@@ -333,6 +333,9 @@
     <ClCompile Include="System\StdC\Ap4StdCFileByteStream.cpp" />
     <ClCompile Include="System\Win32\Ap4Win32Random.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="CMakeFiles.txt" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
