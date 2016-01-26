@@ -22,6 +22,6 @@ bool WSASU()
 void WSACU(){ WSACleanup(); };
 #define socklen_t int
 #else
-bool WSASU(){}
+bool WSASU(){return true;}
 void WSACU(){};
 #endif
