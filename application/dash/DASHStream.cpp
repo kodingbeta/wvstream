@@ -45,7 +45,7 @@ bool DASHStream::download_segment()
 {
 	segment_buffer_.clear();
 	char rangebuf[128];
-	sprintf(rangebuf, "/range/%" PRIu64 " - %" PRIu64, current_seg_->range_begin_, current_seg_->range_end_);
+	sprintf(rangebuf, "/range/%" PRIu64 "-%" PRIu64, current_seg_->range_begin_, current_seg_->range_end_);
 	curl_easy_setopt(curl_handle_, CURLOPT_URL, (current_rep_->url_ + rangebuf).c_str());
 	/* Define our callback to get called when there's data to be written */
 	curl_easy_setopt(curl_handle_, CURLOPT_WRITEFUNCTION, curl_fwrite_init);

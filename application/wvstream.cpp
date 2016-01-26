@@ -459,7 +459,7 @@ static size_t write_license(void *buffer, size_t size, size_t nmemb, void *dest)
 bool Session::setup_widevine(const uint8_t *init_data, const unsigned int init_data_size)
 {
 
-	wvadapter_ = new media::CdmAdapter("com.widevine.alpha", "widevinecdm.dll", media::CdmConfig());
+	wvadapter_ = new media::CdmAdapter("com.widevine.alpha", widevinedll, media::CdmConfig());
 	if (!wvadapter_->valid())
 	{
 		std::cout << "ERROR: Unable to load widevine shared library" << std::endl;
@@ -672,6 +672,11 @@ bool Session::play(int socket_desc, AP4_Position byteOffset)
 	{
 		AP4_File input(*video_input_, AP4_DefaultAtomFactory::Instance, true);
 		AP4_Movie* movie = input.GetMovie();
+		if (!movie)
+		{
+			std::cout << "ERROR: Could not extract license from video stream (MOOV not found)" << std::endl;
+			return false;
+		}
 		AP4_Array<AP4_PsshAtom*>& pssh = movie->GetPsshAtoms();
 
 		unsigned char key_system[16];
@@ -683,7 +688,7 @@ bool Session::play(int socket_desc, AP4_Position byteOffset)
 				license = std::string((const char *)pssh[i]->GetData().GetData(), pssh[i]->GetData().GetDataSize());
 		if (license.empty())
 		{
-			std::cout << "ERROR: Could not extract license from video stream" << std::endl;
+			std::cout << "ERROR: Could not extract license from video stream (PSSH not found)" << std::endl;
 			return false;
 		}
 		if (!setup_widevine((const uint8_t*)license.data(), license.size()))

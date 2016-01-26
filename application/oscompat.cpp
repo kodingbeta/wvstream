@@ -20,8 +20,10 @@ bool WSASU()
 	return WSAStartup(MAKEWORD(2, 2), &wsaData) == 0;
 }
 void WSACU(){ WSACleanup(); };
+const char *widevinedll = "widevinecdm.dll";
 #define socklen_t int
 #else
 bool WSASU(){return true;}
 void WSACU(){};
+const char *widevinedll = "libwidevinecdm.so";
 #endif

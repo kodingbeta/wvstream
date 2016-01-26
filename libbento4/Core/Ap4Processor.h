@@ -57,6 +57,7 @@ struct AP4_AtomLocator;
 +---------------------------------------------------------------------*/
 class AP4_Processor {
 public:
+    AP4_Processor() :m_MoovAtom(0){};
     /**
      * Abstract class that defines the interface implemented by progress
      * listeners. A progress listener is called during the AP4_Processor::Process()

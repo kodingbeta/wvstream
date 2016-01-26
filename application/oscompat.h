@@ -13,6 +13,7 @@
 
 bool WSASU();
 void WSACU();
+extern const char *widevinedll;
 
 #ifdef _WIN32
 #define socklen_t int
