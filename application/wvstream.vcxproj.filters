@@ -19,6 +19,9 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="ReadMe.txt" />
+    <Text Include="CMakeLists.txt">
+      <Filter>Resource Files</Filter>
+    </Text>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="wvstream.cpp">
@@ -42,6 +45,9 @@
     <ClCompile Include="cdm\media\cdm\cdm_adapter.cc">
       <Filter>cdm</Filter>
     </ClCompile>
+    <ClCompile Include="oscompat.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="dash\DASHTree.h">
@@ -51,6 +57,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="helpers.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="oscompat.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

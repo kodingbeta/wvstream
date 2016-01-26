@@ -13,7 +13,8 @@
 #include "../../libcurl/include/curl/curl.h"
 
 #include <iostream>
-#include <string>
+#include <cstring>
+#include "../oscompat.h"
 
 using namespace dash;
 
@@ -63,7 +64,7 @@ bool DASHStream::download_segment()
 
 bool DASHStream::prepare_stream(const uint32_t width, const uint32_t height, const char *lang, uint32_t fixed_bandwidth)
 {
-	language_ = lang?lang:"";
+	language_ = lang ? lang : "";
 	width_ = width;
 	height_ = height;
 	fixed_bandwidth_ = fixed_bandwidth;
@@ -93,7 +94,7 @@ uint32_t DASHStream::read(void* buffer, uint32_t  bytesToRead)
 {
 	if (stopped_)
 		return 0;
-	
+
 	if (segment_read_pos_ >= segment_buffer_.size())
 	{
 		current_seg_ = current_rep_->get_next_segment(current_seg_);
@@ -104,7 +105,7 @@ uint32_t DASHStream::read(void* buffer, uint32_t  bytesToRead)
 	if (avail > bytesToRead)
 		avail = bytesToRead;
 	memcpy(buffer, segment_buffer_.data() + segment_read_pos_, avail);
-	
+
 	segment_read_pos_ += avail;
 	absolute_position_ += avail;
 
@@ -135,42 +136,42 @@ bool DASHStream::select_stream(bool force)
 
 	if (force && absolute_position_ == 0) //already selected
 		return true;
-	
+
 	uint32_t bandwidth = fixed_bandwidth_;
 	if (!bandwidth)
 		bandwidth = static_cast<uint32_t>(download_speed_*(type_ == DASHTree::VIDEO ? 7.2 : 0.8)); //Bandwith split 90 / 10
 	else
 		bandwidth = static_cast<uint32_t>(bandwidth *(type_ == DASHTree::VIDEO ? 0.9 : 0.1));
-  std::string lang(language_), avail_lang;
+	std::string lang(language_), avail_lang;
 
-NEXTLANG:	
-  for (std::vector<DASHTree::AdaptationSet*>::const_iterator ba(current_period_->adaptationSets_.begin()), ea(current_period_->adaptationSets_.end()); ba != ea; ++ba)
+NEXTLANG:
+	for (std::vector<DASHTree::AdaptationSet*>::const_iterator ba(current_period_->adaptationSets_.begin()), ea(current_period_->adaptationSets_.end()); ba != ea; ++ba)
 	{
-    if ((*ba)->type_ == type_ && (lang.empty() || stricmp(lang.c_str(), (*ba)->language_.c_str()) == 0))
-    {
-      for (std::vector<DASHTree::Representation*>::const_iterator br((*ba)->repesentations_.begin()), er((*ba)->repesentations_.end()); br != er; ++br)
-      {
-        if ((*br)->width_ <= width_ && (*br)->height_ <= height_ && (*br)->bandwidth_ < bandwidth && (*br)->codecs_ != "ec-3"
-          && (!new_rep || ((*br)->bandwidth_ > new_rep->bandwidth_)))
-        {
-          new_adp = (*ba);
-          new_rep = (*br);
-        }
-        else if (!min_rep || (*br)->bandwidth_ < min_rep->bandwidth_)
-        {
-          min_adp = (*ba);
-          min_rep = (*br);
-        }
-      }
-    }
-    else if ((*ba)->type_ == type_)
-      avail_lang = (*ba)->language_;
+		if ((*ba)->type_ == type_ && (lang.empty() || stricmp(lang.c_str(), (*ba)->language_.c_str()) == 0))
+		{
+			for (std::vector<DASHTree::Representation*>::const_iterator br((*ba)->repesentations_.begin()), er((*ba)->repesentations_.end()); br != er; ++br)
+			{
+				if ((*br)->width_ <= width_ && (*br)->height_ <= height_ && (*br)->bandwidth_ < bandwidth && (*br)->codecs_ != "ec-3"
+					&& (!new_rep || ((*br)->bandwidth_ > new_rep->bandwidth_)))
+				{
+					new_adp = (*ba);
+					new_rep = (*br);
+				}
+				else if (!min_rep || (*br)->bandwidth_ < min_rep->bandwidth_)
+				{
+					min_adp = (*ba);
+					min_rep = (*br);
+				}
+			}
+		}
+		else if ((*ba)->type_ == type_)
+			avail_lang = (*ba)->language_;
 	}
-  if (!new_rep && !min_rep && !avail_lang.empty())
-  {
-    lang = avail_lang;
-    goto NEXTLANG;
-  }
+	if (!new_rep && !min_rep && !avail_lang.empty())
+	{
+		lang = avail_lang;
+		goto NEXTLANG;
+	}
 
 	if (!new_rep)
 	{
@@ -182,10 +183,10 @@ NEXTLANG:
 		return false;
 
 	uint32_t segid(current_rep_ ? current_rep_->get_segment_pos(current_seg_) : 0);
-	
+
 	if (curl_handle_)
 		clear();
-	
+
 	current_adp_ = new_adp;
 	current_rep_ = new_rep;
 
@@ -211,7 +212,7 @@ NEXTLANG:
 void DASHStream::info(std::ostream &s)
 {
 	static const char* ts[4] = { "NoType", "Video", "Audio", "Text" };
-	s << ts[type_] << " representation: " << current_rep_->url_.substr(current_rep_->url_.find_last_of('/')+1) << " bandwidth: " << current_rep_->bandwidth_ << std::endl;
+	s << ts[type_] << " representation: " << current_rep_->url_.substr(current_rep_->url_.find_last_of('/') + 1) << " bandwidth: " << current_rep_->bandwidth_ << std::endl;
 }
 
 void DASHStream::clear()

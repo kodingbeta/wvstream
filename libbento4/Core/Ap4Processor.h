@@ -291,7 +291,7 @@ protected:
 		AP4_AtomFactory& atom_factory);
 
 
-	AP4_Result AP4_Processor::ProcessFragment(
+	AP4_Result ProcessFragment(
 		AP4_ContainerAtom*		moof,
 		AP4_SidxAtom*			sidx,
 		AP4_Position			sidx_position,

@@ -12,6 +12,7 @@
 #pragma once
 
 #include "DASHTree.h"
+#include <string>
 
 namespace dash
 {

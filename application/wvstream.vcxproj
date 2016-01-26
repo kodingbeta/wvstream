@@ -89,6 +89,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <Text Include="CMakeLists.txt" />
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
@@ -98,12 +99,14 @@
     <ClCompile Include="dash\DASHStream.cpp" />
     <ClCompile Include="dash\DASHTree.cpp" />
     <ClCompile Include="helpers.cpp" />
+    <ClCompile Include="oscompat.cpp" />
     <ClCompile Include="wvstream.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="dash\DASHStream.h" />
     <ClInclude Include="dash\DASHTree.h" />
     <ClInclude Include="helpers.h" />
+    <ClInclude Include="oscompat.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

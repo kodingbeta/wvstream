@@ -10,10 +10,12 @@
 *****************************************************************************/
 
 #include <string>
+#include <cstring>
 
 #include "DASHTree.h"
 #include "../../libcurl/include/curl/curl.h"
 #include "../../expat/include/expat.h"
+#include "../oscompat.h"
 
 using namespace dash;
 
@@ -52,27 +54,27 @@ start(void *data, const char *el, const char **attr)
 						DASHTree::Segment seg;
 						if (strcmp(el, "SegmentURL") == 0)
 						{
-              for (; *attr;)
-              {
-                if (strcmp((const char*)*attr, "mediaRange") == 0)
-                {
-                  seg.SetRange((const char*)*(attr + 1));
-                  break;
-                }
-                attr += 2;
-              }
+							for (; *attr;)
+							{
+								if (strcmp((const char*)*attr, "mediaRange") == 0)
+								{
+									seg.SetRange((const char*)*(attr + 1));
+									break;
+								}
+								attr += 2;
+							}
 						}
 						else if (strcmp(el, "Initialization") == 0)
 						{
-              for (; *attr;)
-              {
-                if (strcmp((const char*)*attr, "range") == 0)
-                {
-                  seg.SetRange((const char*)*(attr + 1));
-                  break;
-                }
-                attr += 2;
-              }
+							for (; *attr;)
+							{
+								if (strcmp((const char*)*attr, "range") == 0)
+								{
+									seg.SetRange((const char*)*(attr + 1));
+									break;
+								}
+								attr += 2;
+							}
 							dash->current_representation_->hasInitialization_ = true;
 						}
 						else
@@ -117,7 +119,7 @@ start(void *data, const char *el, const char **attr)
 				}
 				else if (strcmp(el, "Representation") == 0)
 				{
-					dash->current_representation_= new DASHTree::Representation();
+					dash->current_representation_ = new DASHTree::Representation();
 					dash->current_adaptationset_->repesentations_.push_back(dash->current_representation_);
 					for (; *attr;)
 					{
@@ -149,7 +151,7 @@ start(void *data, const char *el, const char **attr)
 					{
 						if (strcmp((const char*)*attr, "schemeIdUri") == 0)
 						{
-							wvfound = strcmp((const char*)*(attr + 1),"urn:uuid:EDEF8BA9-79D6-4ACE-A3C8-27DCD51D21ED")==0;
+							wvfound = strcmp((const char*)*(attr + 1), "urn:uuid:EDEF8BA9-79D6-4ACE-A3C8-27DCD51D21ED") == 0;
 							break;
 						}
 						attr += 2;
@@ -177,15 +179,15 @@ start(void *data, const char *el, const char **attr)
 						dash->current_adaptationset_->mimeType_ = (const char*)*(attr + 1);
 					attr += 2;
 				}
-        if (dash->current_adaptationset_->type_ == DASHTree::NOTYPE)
-        {
-          if (strncmp(dash->current_adaptationset_->mimeType_.c_str(), "video", 5) == 0)
-            dash->current_adaptationset_->type_ = DASHTree::VIDEO;
-          else if (strncmp(dash->current_adaptationset_->mimeType_.c_str(), "audio", 5) == 0)
-            dash->current_adaptationset_->type_ = DASHTree::AUDIO;
-        }
-        
-        dash->segcount_ = 0;
+				if (dash->current_adaptationset_->type_ == DASHTree::NOTYPE)
+				{
+					if (strncmp(dash->current_adaptationset_->mimeType_.c_str(), "video", 5) == 0)
+						dash->current_adaptationset_->type_ = DASHTree::VIDEO;
+					else if (strncmp(dash->current_adaptationset_->mimeType_.c_str(), "audio", 5) == 0)
+						dash->current_adaptationset_->type_ = DASHTree::AUDIO;
+				}
+
+				dash->segcount_ = 0;
 				dash->currentNode_ |= DASHTree::MPDNODE_ADAPTIONSET;
 			}
 		}
@@ -270,27 +272,27 @@ end(void *data, const char *el)
 					if (strcmp(el, "SegmentDurations") == 0)
 						dash->currentNode_ &= ~DASHTree::MPDNODE_SEGMENTDURATIONS;
 				}
-        else if (dash->currentNode_ & DASHTree::MPDNODE_CONTENTPROTECTION)
-        {
-          if (dash->currentNode_ & DASHTree::MPDNODE_PSSH)
-          {
-            if (strcmp(el, "cenc:pssh") == 0)
-            {
-              dash->adp_pssh_ = dash->strXMLText_;
-              dash->currentNode_ &= ~DASHTree::MPDNODE_PSSH;
-            }
-          }
-          else if (strcmp(el, "ContentProtection") == 0)
-          {
-            if (dash->adp_pssh_.empty())
-              dash->adp_pssh_ = "FILE";
-            dash->currentNode_ &= ~DASHTree::MPDNODE_CONTENTPROTECTION;
-          }
-        }
+				else if (dash->currentNode_ & DASHTree::MPDNODE_CONTENTPROTECTION)
+				{
+					if (dash->currentNode_ & DASHTree::MPDNODE_PSSH)
+					{
+						if (strcmp(el, "cenc:pssh") == 0)
+						{
+							dash->adp_pssh_ = dash->strXMLText_;
+							dash->currentNode_ &= ~DASHTree::MPDNODE_PSSH;
+						}
+					}
+					else if (strcmp(el, "ContentProtection") == 0)
+					{
+						if (dash->adp_pssh_.empty())
+							dash->adp_pssh_ = "FILE";
+						dash->currentNode_ &= ~DASHTree::MPDNODE_CONTENTPROTECTION;
+					}
+				}
 				else if (strcmp(el, "AdaptationSet") == 0)
 				{
-          if (!dash->pssh_.empty() && dash->adp_pssh_ != dash->pssh_)
-					  dash->current_period_->adaptationSets_.pop_back();
+					if (!dash->pssh_.empty() && dash->adp_pssh_ != dash->pssh_)
+						dash->current_period_->adaptationSets_.pop_back();
 					else
 						dash->pssh_ = dash->adp_pssh_;
 					dash->currentNode_ &= ~DASHTree::MPDNODE_ADAPTIONSET;
@@ -332,8 +334,8 @@ void DASHTree::Segment::SetRange(const char *range)
 	const char *delim(strchr(range, '-'));
 	if (delim)
 	{
-		range_begin_ = strtoull(range,0,10);
-		range_end_ = strtoull(delim + 1,0,10);
+		range_begin_ = strtoull(range, 0, 10);
+		range_end_ = strtoull(delim + 1, 0, 10);
 	}
 	else
 		range_begin_ = range_end_ = 0;
@@ -374,10 +376,10 @@ bool DASHTree::open(const char *url)
 	/* Automaticlly decompress gzipped responses */
 	curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "gzip");
 	CURLcode res = curl_easy_perform(curl);
-	
+
 	download_speed_ = 0.0;
 	curl_easy_getinfo(curl, CURLINFO_SPEED_DOWNLOAD, &download_speed_);
-	
+
 	curl_easy_cleanup(curl);
 
 	XML_ParserFree(p);
@@ -389,13 +391,13 @@ bool DASHTree::open(const char *url)
 
 bool DASHTree::has_type(StreamType t)
 {
-  if (periods_.empty())
-    return false;
-  
-  for (std::vector<AdaptationSet*>::const_iterator b(periods_[0]->adaptationSets_.begin()), e(periods_[0]->adaptationSets_.end()); b != e; ++b)
-    if ((*b)->type_ == t)
-      return true;
-  return false;
+	if (periods_.empty())
+		return false;
+
+	for (std::vector<AdaptationSet*>::const_iterator b(periods_[0]->adaptationSets_.begin()), e(periods_[0]->adaptationSets_.end()); b != e; ++b)
+		if ((*b)->type_ == t)
+			return true;
+	return false;
 }
 
 uint32_t DASHTree::estimate_segcount(uint32_t duration, uint32_t timescale)

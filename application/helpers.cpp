@@ -12,7 +12,7 @@
 #include "helpers.h"
 
 #ifndef BYTE
-	typedef unsigned char BYTE;
+typedef unsigned char BYTE;
 #endif
 
 static const BYTE from_base64[] = { 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
@@ -28,40 +28,40 @@ static const BYTE from_base64[] = { 255, 255, 255, 255, 255, 255, 255, 255, 255,
 bool b64_decode(const char *in, unsigned int in_len, uint8_t *out, unsigned int &out_len)
 {
 	// Make sure string length is a multiple of 4
-  char *in_copy(0);
-  if (in_len > 3 && strnicmp(in + (in_len - 3), "%3D", 3)==0)
-  {
-    in_copy = (char *)malloc(in_len+1);
-    strcpy(in_copy, in);
-    in = in_copy;
-    if (in_len > 6 && strnicmp(in + (in_len - 6), "%3D", 3) == 0)
-    {
-      strcpy(in_copy + (in_len - 6), "==");
-        in_len -= 4;
-    }
-    else {
-      strcpy(in_copy + (in_len - 3), "=");
-        in_len -= 2;
-    }
-  }
-    
-  if (in_len & 3)
-  {
-    free(in_copy);
-    return false;
-  }
+	char *in_copy(0);
+	if (in_len > 3 && strnicmp(in + (in_len - 3), "%3D", 3) == 0)
+	{
+		in_copy = (char *)malloc(in_len + 1);
+		strcpy(in_copy, in);
+		in = in_copy;
+		if (in_len > 6 && strnicmp(in + (in_len - 6), "%3D", 3) == 0)
+		{
+			strcpy(in_copy + (in_len - 6), "==");
+			in_len -= 4;
+		}
+		else {
+			strcpy(in_copy + (in_len - 3), "=");
+			in_len -= 2;
+		}
+	}
+
+	if (in_len & 3)
+	{
+		free(in_copy);
+		return false;
+	}
 
 	unsigned int new_out_len = in_len / 4 * 3;
 	if (in[in_len - 1] == '=') --new_out_len;
 	if (in[in_len - 2] == '=') --new_out_len;
 	if (new_out_len > out_len)
-  {
-    free(in_copy);
-    return false;
-  }
-  out_len = new_out_len;
+	{
+		free(in_copy);
+		return false;
+	}
+	out_len = new_out_len;
 
-	for (size_t i = 0; i<in_len; i += 4)
+	for (size_t i = 0; i < in_len; i += 4)
 	{
 		// Get values for each group of four base 64 characters
 		BYTE b4[4];
@@ -81,8 +81,8 @@ bool b64_decode(const char *in, unsigned int in_len, uint8_t *out, unsigned int 
 		if (b4[2] != 0xff) *out++ = b3[1];
 		if (b4[3] != 0xff) *out++ = b3[2];
 	}
-  free(in_copy);
-  return true;
+	free(in_copy);
+	return true;
 }
 
 static const char *to_base64 =
@@ -101,8 +101,8 @@ std::string b64_encode(unsigned char const* in, unsigned int in_len, bool urlEnc
 		i = in_len > 2 ? 3 : in_len;
 		in_len -= i;
 		c_3[0] = *(in++);
-		c_3[1] = i>1 ? *(in++) : 0;
-		c_3[2] = i>2 ? *(in++) : 0;
+		c_3[1] = i > 1 ? *(in++) : 0;
+		c_3[2] = i > 2 ? *(in++) : 0;
 
 		c_4[0] = (c_3[0] & 0xfc) >> 2;
 		c_4[1] = ((c_3[0] & 0x03) << 4) + ((c_3[1] & 0xf0) >> 4);
