@@ -82,8 +82,11 @@ void CdmAdapter::Initialize(const std::string& cdm_path)
 
 	base::NativeLibraryLoadError error;
 	base::UnloadNativeLibrary(library_);
+#if defined(OS_WIN)	
 	library_ = base::LoadNativeLibraryDynamically(cdm_path);
-
+#else
+	library_ = base::LoadNativeLibrary(cdm_path, 0);
+#endif
 	if (!library_)
 		return;
 

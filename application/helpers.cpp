@@ -10,6 +10,9 @@
 *****************************************************************************/
 
 #include "helpers.h"
+#include <cstring>
+#include "oscompat.h"
+
 
 #ifndef BYTE
 typedef unsigned char BYTE;

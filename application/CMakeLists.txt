@@ -17,6 +17,7 @@ include_directories (
 
 add_executable (wvstream
         wvstream.cpp
+		oscompat.cpp
         dash/DASHTree.cpp
         dash/DASHStream.cpp
         helpers.cpp
