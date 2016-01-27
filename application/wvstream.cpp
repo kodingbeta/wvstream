@@ -899,7 +899,11 @@ int main(int argc, char *argv[])
 				if (b != e)
 				{
 					if (!(*b)->play(client_sock, 0))
-						std::cout << "ERROR: Unable to play stream with session_id: " << sid << std::endl;
+					{
+						std::cout << "ERROR: Unable to play stream with session_id: " << sid << " <- removed!" << std::endl;
+						delete (*b);
+						session_stack.erase(b);
+					}
 					else
 					{
 						std::cout << "INFO: Start playing stream with session_id: " << sid << std::endl;

@@ -18,7 +18,7 @@ uint64_t gtc()
 #else
 	struct timespec tp;
 	clock_gettime(CLOCK_REALTIME, &tp);
-	return tp.tv_sec * 1000 + tp.tv_nsec / 1000;
+	return  tp.tv_sec * 1000 + tp.tv_nsec / 1000000;
 #endif
 }
 
