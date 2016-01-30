@@ -256,8 +256,8 @@ cdm::Buffer* CdmAdapter::Allocate(uint32_t capacity)
 
 void CdmAdapter::SetTimer(int64_t delay_ms, void* context)
 {
-	timer_context_ = context;
-	timer_expired_ = gtc() + delay_ms;
+	//timer_context_ = context;
+	//timer_expired_ = gtc() + delay_ms;
 }
 
 cdm::Time CdmAdapter::GetCurrentWallTime()

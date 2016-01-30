@@ -897,7 +897,11 @@ AP4_Processor::MuxStream(
 		moov.SetItemCount(1);
 
 		AP4_MvhdAtom *mvhd(AP4_DYNAMIC_CAST(AP4_MvhdAtom, moov[0]->GetChild(AP4_ATOM_TYPE_MVHD, 0)));
-		mvhd->SetDuration(143820677);
+		if (!mvhd->GetDuration())
+		{
+			AP4_MehdAtom *mehd(AP4_DYNAMIC_CAST(AP4_MehdAtom, mvex_base->GetChild(AP4_ATOM_TYPE_MEHD, 0)));
+			mvhd->SetDuration(mehd ? mehd->GetDuration() : 0);
+		}
 
 		// finalize the processor
 		Finalize(top_level);
@@ -963,11 +967,12 @@ AP4_Processor::MuxStream(
         }
       
       AP4_Atom* atom = NULL;
-      if (AP4_SUCCEEDED(input[nextStream]->Tell(stream_offset)) && AP4_SUCCEEDED(atom_factory.CreateAtomFromStream(*input[nextStream], atom)))
+      if (AP4_SUCCEEDED(result = input[nextStream]->Tell(stream_offset)) && AP4_SUCCEEDED(result = atom_factory.CreateAtomFromStream(*input[nextStream], atom)))
       {
         if (atom->GetType() != AP4_ATOM_TYPE_MOOF)
           return AP4_ERROR_INVALID_FORMAT;
-      }
+			} else if (atom)
+				return result;
 
       moof_positions[nextStream] = stream_offset;
       mdat_positions[nextStream] = stream_offset + atom->GetSize() + +AP4_ATOM_HEADER_SIZE;

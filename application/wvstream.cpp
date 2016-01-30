@@ -257,7 +257,7 @@ public:
 			bytesToWrite -= bytesWritten;
 			b += bytesWritten;
 		}
-		while (bytesToWrite && (nWritten = send(socket_, b, bytesToWrite, 0)) != SOCKET_ERROR)
+		while (bytesToWrite && (nWritten = send(socket_, b, bytesToWrite, MSG_NOSIGNAL)) != SOCKET_ERROR)
 		{
 			bytesToWrite -= nWritten;
 			b += nWritten;

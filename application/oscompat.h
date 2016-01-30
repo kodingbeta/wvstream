@@ -17,6 +17,7 @@ extern const char *widevinedll;
 
 #ifdef _WIN32
 #define socklen_t int
+#define MSG_NOSIGNAL 0
 #else
 #define stricmp strcasecmp
 #define strnicmp strncasecmp
