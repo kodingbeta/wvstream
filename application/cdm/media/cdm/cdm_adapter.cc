@@ -23,6 +23,7 @@ uint64_t gtc()
 #else
 	struct timespec tp;
 	#ifdef OS_MACOSX
+	  // Taken from https://gist.github.com/jbenet/1087739
 	  clock_serv_t cclock;
 	  mach_timespec_t mts;
 	  host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
