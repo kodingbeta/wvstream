@@ -9,6 +9,7 @@
 * and conditions of the applicable license agreement.
 *****************************************************************************/
 
+#include <stdlib.h> 
 #include "helpers.h"
 #include <cstring>
 #include "oscompat.h"

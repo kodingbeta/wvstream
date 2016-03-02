@@ -9,6 +9,11 @@
 
 #include "../base/limits.h"
 
+#ifdef OS_MACOSX
+#include <mach/clock.h>
+#include <mach/mach.h>
+#endif
+
 namespace media {
 
 uint64_t gtc()
@@ -17,7 +22,17 @@ uint64_t gtc()
 	return GetTickCount64();
 #else
 	struct timespec tp;
-	clock_gettime(CLOCK_REALTIME, &tp);
+	#ifdef OS_MACOSX
+	  clock_serv_t cclock;
+	  mach_timespec_t mts;
+	  host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
+	  clock_get_time(cclock, &mts);
+	  mach_port_deallocate(mach_task_self(), cclock);
+	  tp.tv_sec = mts.tv_sec;
+	  tp.tv_nsec = mts.tv_nsec;
+	#else
+	  clock_gettime(CLOCK_REALTIME, &tp);
+	#endif
 	return  tp.tv_sec * 1000 + tp.tv_nsec / 1000000;
 #endif
 }
@@ -66,7 +81,7 @@ CdmAdapter::CdmAdapter(
   Initialize(cdm_path);
 }
 
-CdmAdapter::~CdmAdapter() 
+CdmAdapter::~CdmAdapter()
 {
 	if (!cdm_)
 		return;
@@ -82,7 +97,7 @@ void CdmAdapter::Initialize(const std::string& cdm_path)
 
 	base::NativeLibraryLoadError error;
 	base::UnloadNativeLibrary(library_);
-#if defined(OS_WIN)	
+#if defined(OS_WIN)
 	library_ = base::LoadNativeLibraryDynamically(cdm_path);
 #else
 	library_ = base::LoadNativeLibrary(cdm_path, 0);
@@ -99,7 +114,7 @@ void CdmAdapter::Initialize(const std::string& cdm_path)
 	}
 
 	cdm_ = reinterpret_cast<cdm::ContentDecryptionModule*>(create_cdm_func(cdm::ContentDecryptionModule_8::kVersion, key_system_.data(), key_system_.size(), GetCdmHost, this));
-  
+
 	if (cdm_)
 	{
 		cdm_->Initialize(cdm_config_.allow_distinctive_identifier,
@@ -181,7 +196,7 @@ void CdmAdapter::RemoveSession(uint32_t promise_id,
 }
 
 void CdmAdapter::TimerExpired(void* context)
-{ 
+{
 	cdm_->TimerExpired(context);
 }
 
@@ -272,7 +287,7 @@ void CdmAdapter::OnResolvePromise(uint32_t promise_id)
 
 void CdmAdapter::OnResolveNewSessionPromise(uint32_t promise_id,
                                             const char* session_id,
-                                            uint32_t session_id_size) 
+                                            uint32_t session_id_size)
 {
 }
 
@@ -357,7 +372,7 @@ cdm::FileIO* CdmAdapter::CreateFileIO(cdm::FileIOClient* client)
 }
 
 bool CdmAdapter::SessionValid()
-{ 
+{
 	return !session_id_.empty() && !message_.empty();
 }
 

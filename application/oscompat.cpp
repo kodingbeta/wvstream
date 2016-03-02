@@ -22,6 +22,10 @@ bool WSASU()
 void WSACU(){ WSACleanup(); };
 const char *widevinedll = "widevinecdm.dll";
 #define socklen_t int
+#elif defined(__APPLE__)
+bool WSASU(){return true;}
+void WSACU(){};
+const char *widevinedll = "libwidevinecdm.dylib";
 #else
 bool WSASU(){return true;}
 void WSACU(){};
