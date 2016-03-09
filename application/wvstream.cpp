@@ -257,7 +257,11 @@ public:
 			bytesToWrite -= bytesWritten;
 			b += bytesWritten;
 		}
+		#ifdef OS_WIN
 		while (bytesToWrite && (nWritten = send(socket_, b, bytesToWrite, MSG_NOSIGNAL)) != SOCKET_ERROR)
+		#elif defined(__APPLE__)
+		while (bytesToWrite && (nWritten = send(socket_, b, bytesToWrite, SO_NOSIGPIPE)) != SOCKET_ERROR)
+		#endif
 		{
 			bytesToWrite -= nWritten;
 			b += nWritten;
@@ -703,11 +707,12 @@ bool Session::play(int socket_desc, AP4_Position byteOffset)
 	}
 	audio_input_ = new AP4_DASHStream(&audio_);
 
+
 #ifdef SEPARATE_STREAMS
-	AP4_FileByteStream::Create("C:\\Temp\\video.mov", AP4_FileByteStream::STREAM_MODE_WRITE, video_output_);
-	AP4_FileByteStream::Create("C:\\Temp\\audio.mov", AP4_FileByteStream::STREAM_MODE_WRITE, audio_output_);
+	AP4_FileByteStream::Create("./video.mov", AP4_FileByteStream::STREAM_MODE_WRITE, video_output_);
+	AP4_FileByteStream::Create("./audio.mov", AP4_FileByteStream::STREAM_MODE_WRITE, audio_output_);
 #elif MUXED_STREAM
-	AP4_FileByteStream::Create("C:\\Temp\\muxed.mov", AP4_FileByteStream::STREAM_MODE_WRITE, muxed_output_);
+	AP4_FileByteStream::Create("./muxed.mov", AP4_FileByteStream::STREAM_MODE_WRITE, muxed_output_);
 	muxed_output_->SetObserver(this);
 #endif
 
@@ -811,7 +816,7 @@ AP4_Result Session::OnFlush(AP4_ByteStream *stream)
 	return AP4_SUCCESS;
 }
 
-#if !defined SEPARATE_STREAMS && !defined MUXED_STREAM 
+#if !defined SEPARATE_STREAMS && !defined MUXED_STREAM
 
 int main(int argc, char *argv[])
 {
