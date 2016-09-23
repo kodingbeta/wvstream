@@ -4,14 +4,24 @@
 
 #include "cdm_adapter.h"
 #include <chrono>
-
+#include <thread>
+#include <iostream>
 #define DCHECK(condition) assert(condition)
 
 #include "../base/limits.h"
 
-#ifdef OS_MACOSX
-#include <mach/clock.h>
-#include <mach/mach.h>
+#ifdef __APPLE__
+#include <sys/time.h>
+//clock_gettime is not implemented on OSX
+int clock_gettime(int clk_id, struct timespec* t) {
+    struct timeval now;
+    int rv = gettimeofday(&now, NULL);
+    if (rv) return rv;
+    t->tv_sec  = now.tv_sec;
+    t->tv_nsec = now.tv_usec * 1000;
+    return 0;
+}
+#define CLOCK_REALTIME 1
 #endif
 
 namespace media {
@@ -22,18 +32,7 @@ uint64_t gtc()
 	return GetTickCount64();
 #else
 	struct timespec tp;
-	#ifdef OS_MACOSX
-	  // Taken from https://gist.github.com/jbenet/1087739
-	  clock_serv_t cclock;
-	  mach_timespec_t mts;
-	  host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
-	  clock_get_time(cclock, &mts);
-	  mach_port_deallocate(mach_task_self(), cclock);
-	  tp.tv_sec = mts.tv_sec;
-	  tp.tv_nsec = mts.tv_nsec;
-	#else
-	  clock_gettime(CLOCK_REALTIME, &tp);
-	#endif
+	clock_gettime(CLOCK_REALTIME, &tp);
 	return  tp.tv_sec * 1000 + tp.tv_nsec / 1000000;
 #endif
 }
@@ -61,6 +60,7 @@ typedef void* (*CreateCdmFunc)(int cdm_interface_version,
 	uint32_t key_system_size,
 	GetCdmHostFunc get_cdm_host_func,
 	void* user_data);
+
 }  // namespace
 
 /*******************************         CdmAdapter        ****************************************/
@@ -68,10 +68,14 @@ typedef void* (*CreateCdmFunc)(int cdm_interface_version,
 
 CdmAdapter::CdmAdapter(
     const std::string& key_system,
-	const std::string& cdm_path,
-    const CdmConfig& cdm_config)
+    const std::string& cdm_path,
+    const std::string& base_path,
+    const CdmConfig& cdm_config,
+    CdmAdapterClient &client)
 : key_system_(key_system)
-,cdm_config_(cdm_config)
+, cdm_base_path_(base_path)
+, cdm_config_(cdm_config)
+, client_(client)
 , cdm_(0)
 , library_(0)
 , active_buffer_(0)
@@ -146,10 +150,10 @@ void CdmAdapter::CreateSessionAndGenerateRequest(uint32_t promise_id,
 	const uint8_t* init_data,
 	uint32_t init_data_size)
 {
-  cdm_->CreateSessionAndGenerateRequest(
-      promise_id, session_type,
-      init_data_type, init_data,
-      init_data_size);
+	cdm_->CreateSessionAndGenerateRequest(
+		  promise_id, session_type,
+		  init_data_type, init_data,
+		  init_data_size);
 }
 
 void CdmAdapter::LoadSession(uint32_t promise_id,
@@ -168,17 +172,21 @@ void CdmAdapter::UpdateSession(uint32_t promise_id,
 	uint32_t response_size)
 {
 	license_ = std::string((const char*)response, response_size);
+	
 	cdm_->UpdateSession(promise_id, session_id, session_id_size,
                       response, response_size);
 }
 
 void CdmAdapter::UpdateSession(const uint8_t* response, uint32_t response_size)
 {
+	std::cout << "CdmAdapter::UpdateSession: session_id_" << session_id_.c_str() << std::endl;
+	std::cout << "CdmAdapter::UpdateSession: response - " << response << std::endl;
 	UpdateSession(2, session_id_.c_str(), session_id_.size(), response, response_size);
 }
 
 void CdmAdapter::UpdateSession()
 {
+	std::cout << "CdmAdapter::UpdateSession: " << license_.c_str() << std::endl;
 	UpdateSession((const uint8_t*)license_.c_str(), license_.size());
 }
 
@@ -209,9 +217,25 @@ cdm::Status CdmAdapter::Decrypt(const cdm::InputBuffer& encrypted_buffer,
 		timer_expired_ = 0;
 		TimerExpired(timer_context_);
 	}
-	active_buffer_ = decrypted_buffer->DecryptedBuffer();
+  //We need this wait here for fast systems, during buffering
+  //widewine stopps if some seconds (5??) are fetched too fast
+  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+  active_buffer_ = decrypted_buffer->DecryptedBuffer();
 	cdm::Status ret = cdm_->Decrypt(encrypted_buffer, decrypted_buffer);
 	active_buffer_ = 0;
+	if (ret == 0)
+		std::cout << "CdmAdapter::Decrypt successfull" << std::endl;
+	else if (ret == 1)
+		std::cout << "CdmAdapter::Decrypt failed - Decoder needs more data to produce a decoded frame/sample." << std::endl;
+	else if (ret == 2)
+		std::cout << "CdmAdapter::Decrypt failed due to missing key " << std::endl;
+	else if (ret == 3)
+		std::cout << "CdmAdapter::Decrypt failed - Session management error " << std::endl;
+	else if (ret == 4)
+		std::cout << "CdmAdapter::Decrypt failed - Decryption failed " << std::endl;
+	else if (ret == 5)
+		std::cout << "CdmAdapter::Decrypt failed - Error decoding audio or video" << std::endl;
 	return ret;
 }
 
@@ -311,6 +335,8 @@ void CdmAdapter::OnSessionMessage(const char* session_id,
 	session_id_ = std::string(session_id, session_id_size);
 	message_ = std::string(message, message_size);
 	message_type_ = message_type;
+
+  client_.OnCDMMessage(CdmAdapterClient::kSessionMessage);
 }
 
 void CdmAdapter::OnSessionKeysChange(const char* session_id,
@@ -319,20 +345,27 @@ void CdmAdapter::OnSessionKeysChange(const char* session_id,
                                      const cdm::KeyInformation* keys_info,
                                      uint32_t keys_info_count)
 {
-	for (uint32_t i(0); i < keys_info_count; ++i)
-		if (keys_info[i].status == cdm::kUsable)
-			usable_key_id_ = std::string(reinterpret_cast<const char*>(keys_info[i].key_id), keys_info[i].key_id_size);
+  for (uint32_t i(0); i < keys_info_count; ++i)
+    if (keys_info[i].status == cdm::kUsable || keys_info[i].status == cdm::kOutputRestricted)
+    {
+      usable_key_id_ = std::string(reinterpret_cast<const char*>(keys_info[i].key_id), keys_info[i].key_id_size);
+      if (keys_info[i].status == cdm::kUsable)
+        break;
+    }
+  client_.OnCDMMessage(CdmAdapterClient::kSessionKeysChange);
 }
 
 void CdmAdapter::OnExpirationChange(const char* session_id,
                                     uint32_t session_id_size,
                                     cdm::Time new_expiry_time)
 {
+  client_.OnCDMMessage(CdmAdapterClient::kSessionExpired);
 }
 
 void CdmAdapter::OnSessionClosed(const char* session_id,
                                  uint32_t session_id_size)
 {
+  client_.OnCDMMessage(CdmAdapterClient::kSessionClosed);
 }
 
 void CdmAdapter::OnLegacySessionError(const char* session_id,
@@ -342,6 +375,7 @@ void CdmAdapter::OnLegacySessionError(const char* session_id,
                                       const char* error_message,
                                       uint32_t error_message_size)
 {
+  client_.OnCDMMessage(CdmAdapterClient::kLegacySessionError);
 }
 
 void CdmAdapter::SendPlatformChallenge(const char* service_id,
@@ -369,12 +403,87 @@ void CdmAdapter::OnDeferredInitializationDone(cdm::StreamType stream_type,
 // The CDM owns the returned object and must call FileIO::Close() to release it.
 cdm::FileIO* CdmAdapter::CreateFileIO(cdm::FileIOClient* client)
 {
-  return nullptr;
+  return new CdmFileIoImpl(cdm_base_path_, client);
 }
 
 bool CdmAdapter::SessionValid()
 {
 	return !session_id_.empty() && !message_.empty();
+}
+
+/*******************************         CdmFileIoImpl        ****************************************/
+
+CdmFileIoImpl::CdmFileIoImpl(std::string base_path, cdm::FileIOClient* client)
+  : base_path_(base_path)
+  , client_(client)
+  , file_descriptor_(0)
+  , data_buffer_(0)
+  , opened_(false)
+{
+}
+
+void CdmFileIoImpl::Open(const char* file_name, uint32_t file_name_size)
+{
+  if (!opened_)
+  {
+    opened_ = true;
+    base_path_ += std::string(file_name, file_name_size);
+    client_->OnOpenComplete(cdm::FileIOClient::kSuccess);
+  }
+  else
+    client_->OnOpenComplete(cdm::FileIOClient::kInUse);
+}
+
+void CdmFileIoImpl::Read()
+{
+  cdm::FileIOClient::Status status(cdm::FileIOClient::kError);
+  size_t sz(0);
+
+  free(reinterpret_cast<void*>(data_buffer_));
+  data_buffer_ = 0;
+
+  file_descriptor_ = fopen(base_path_.c_str(), "rb");
+
+  if (file_descriptor_)
+  {
+    status = cdm::FileIOClient::kSuccess;
+    fseek(file_descriptor_, 0, SEEK_END);
+    sz = ftell(file_descriptor_);
+    if (sz)
+    {
+      fseek(file_descriptor_, 0, SEEK_SET);
+      if ((data_buffer_ = reinterpret_cast<uint8_t*>(malloc(sz))) == nullptr || fread(data_buffer_, 1, sz, file_descriptor_) != sz)
+        status = cdm::FileIOClient::kError;
+    }
+  } else 
+    status = cdm::FileIOClient::kSuccess;
+  client_->OnReadComplete(status, data_buffer_, sz);
+}
+
+void CdmFileIoImpl::Write(const uint8_t* data, uint32_t data_size)
+{
+  cdm::FileIOClient::Status status(cdm::FileIOClient::kError);
+  file_descriptor_ = fopen(base_path_.c_str(), "wb");
+
+  if (file_descriptor_)
+  {
+    if (fwrite(data, 1, data_size, file_descriptor_) == data_size)
+      status = cdm::FileIOClient::kSuccess;
+  }
+  client_->OnWriteComplete(status);
+}
+
+void CdmFileIoImpl::Close()
+{
+  if (file_descriptor_)
+  {
+    fclose(file_descriptor_);
+    file_descriptor_ = 0;
+  }
+  client_ = 0;
+  free(reinterpret_cast<void*>(data_buffer_));
+  data_buffer_ = 0;
+  delete this;
 }
 
 }  // namespace media
