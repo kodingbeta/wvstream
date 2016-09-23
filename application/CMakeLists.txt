@@ -31,6 +31,7 @@ add_executable (wvstream
 	dash/DASHTree.cpp
 	dash/DASHStream.cpp
 	helpers.cpp
+	jsmn.c
 	cdm/base/native_library.cc
 	cdm/base/native_library_posix.cc
 	cdm/media/cdm/cdm_adapter.cc

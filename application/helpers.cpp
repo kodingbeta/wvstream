@@ -1,19 +1,25 @@
 /*
-* helpers.cpp
-*****************************************************************************
-* Copyright (C) 2015, liberty_developer
+*      Copyright (C) 2016-2016 peak3d
+*      http://www.peak3d.de
 *
-* Email: liberty.developer@xmail.net
+*  This Program is free software; you can redistribute it and/or modify
+*  it under the terms of the GNU General Public License as published by
+*  the Free Software Foundation; either version 2, or (at your option)
+*  any later version.
 *
-* This source code and its use and distribution, is subject to the terms
-* and conditions of the applicable license agreement.
-*****************************************************************************/
+*  This Program is distributed in the hope that it will be useful,
+*  but WITHOUT ANY WARRANTY; without even the implied warranty of
+*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+*  GNU General Public License for more details.
+*
+*  <http://www.gnu.org/licenses/>.
+*
+*/
 
-#include <stdlib.h> 
 #include "helpers.h"
 #include <cstring>
 #include "oscompat.h"
-
+#include <stdlib.h>
 
 #ifndef BYTE
 typedef unsigned char BYTE;
@@ -52,6 +58,7 @@ bool b64_decode(const char *in, unsigned int in_len, uint8_t *out, unsigned int 
 	if (in_len & 3)
 	{
 		free(in_copy);
+        out_len = 0;
 		return false;
 	}
 
@@ -61,6 +68,7 @@ bool b64_decode(const char *in, unsigned int in_len, uint8_t *out, unsigned int 
 	if (new_out_len > out_len)
 	{
 		free(in_copy);
+        out_len = 0;
 		return false;
 	}
 	out_len = new_out_len;
@@ -128,58 +136,120 @@ std::string b64_encode(unsigned char const* in, unsigned int in_len, bool urlEnc
 	return ret;
 }
 
-static uint64_t readVARINT(uint8_t *&buf)
+std::vector<std::string> split(const std::string& s, char seperator)
 {
-	//Read VARINT
-	uint64_t t(0), n(0);
+  std::vector<std::string> output;
+  std::string::size_type prev_pos = 0, pos = 0;
 
-	do{
-		t |= (*buf & 127) << n;
-		n += 7;
-	} while ((*(buf++) & 128) != 0);
-	return t;
+  while ((pos = s.find(seperator, pos)) != std::string::npos)
+  {
+    std::string substring(s.substr(prev_pos, pos - prev_pos));
+    output.push_back(substring);
+    prev_pos = ++pos;
+  }
+  output.push_back(s.substr(prev_pos, pos - prev_pos));
+  return output;
 }
 
-
-bool getInitDataFromStream(uint8_t *initData, unsigned int initdata_size, uint8_t *out, unsigned int &out_len)
+std::string &trim(std::string &src)
 {
-	uint8_t *initDataEnd(initData + initdata_size);
-	unsigned int len;
-
-	static const uint8_t VARINT = 0;
-	static const uint8_t NUMBER64 = 1;
-	static const uint8_t LENGTH_LIMITED = 2;
-	static const uint8_t NUMBER32 = 5;
-
-	for (; initData < initDataEnd;)
-	{
-		//Read VARINT
-		uint64_t vi(readVARINT(initData));
-		switch (vi & 7) {
-		case VARINT:
-			readVARINT(initData);
-			break;
-		case NUMBER64:
-			initData += 8;
-			break;
-		case NUMBER32:
-			initData += 4;
-			break;
-		case LENGTH_LIMITED:
-			len = static_cast<unsigned int>(readVARINT(initData));
-			if (vi >> 3 == 2)
-				return b64_decode((const char*)initData, len, out, out_len);
-			initData += len;
-		default:;
-		}
-	}
-	return false;
+  src.erase(0, src.find_first_not_of(" "));
+  src.erase(src.find_last_not_of(" ") + 1);
+  return src;
 }
 
-void findreplace(std::string& str, const char *f, const char *r){
-	size_t pos = 0, lenf(strlen(f)), lenr(strlen(r));
-	while ((pos = str.find(f, pos)) != std::string::npos){
-		str.replace(pos, lenf, r);
-		pos += lenr;
-	}
+static char from_hex(char ch) {
+  return isdigit(ch) ? ch - '0' : tolower(ch) - 'a' + 10;
+}
+
+std::string url_decode(std::string text) {
+  char h;
+  std::string escaped;
+
+  for (auto i = text.begin(), n = text.end(); i != n; ++i) {
+    std::string::value_type c = (*i);
+    if (c == '%') {
+      if (i[1] && i[2]) {
+        h = from_hex(i[1]) << 4 | from_hex(i[2]);
+        escaped += h;
+        i += 2;
+      }
+    }
+    else if (c == '+')
+      escaped += ' ';
+    else {
+      escaped += c;
+    }
+  }
+  return escaped;
+}
+
+static unsigned char HexNibble(char c)
+{
+  if (c >= '0' && c <= '9')
+    return c - '0';
+  else if (c >= 'a' && c <= 'f')
+    return 10 + (c - 'a');
+  else if (c >= 'A' && c <= 'F')
+    return 10 + (c - 'A');
+  return 0;
+}
+
+std::string annexb_to_avc(const char *b16_data)
+{
+  unsigned int sz = strlen(b16_data) >> 1, szRun(sz);
+  std::string result;
+
+  if (sz > 1024)
+    return result;
+
+  uint8_t buffer[1024], *data(buffer);
+  while (szRun--)
+  {
+    *data = (HexNibble(*b16_data) << 4) + HexNibble(*(b16_data+1));
+    b16_data += 2;
+    ++data;
+  }
+
+  if (sz <= 6 || buffer[0] != 0 || buffer[1] != 0 || buffer[2] != 0 || buffer[3] != 1)
+  {
+    result = std::string((const char*)buffer, sz);
+    return result;
+  }
+
+  uint8_t *sps = 0, *pps = 0, *end = buffer + sz;
+
+  sps = pps = buffer + 4;
+
+  while (pps + 4 <= end && (pps[0] != 0 || pps[1] != 0 || pps[2] != 0 || pps[3] != 1))
+    ++pps;
+
+  //Make sure we have found pps start
+  if (pps + 4 >= end)
+    return result;
+
+  pps += 4;
+
+  result.resize(sz + 3); //need 3 byte more for new header
+  unsigned int pos(0);
+
+  result[pos++] = 1;
+  result[pos++] = static_cast<char>(sps[1]);
+  result[pos++] = static_cast<char>(sps[2]);
+  result[pos++] = static_cast<char>(sps[3]);
+  result[pos++] = static_cast<char>(0xFF); //6 bits reserved(111111) + 2 bits nal size length - 1 (11)
+  result[pos++] = static_cast<char>(0xe1); //3 bits reserved (111) + 5 bits number of sps (00001)
+
+  sz = pps - sps - 4;
+  result[pos++] = static_cast<const char>(sz >> 8);
+  result[pos++] = static_cast<const char>(sz & 0xFF);
+  result.replace(pos, sz, (const char*)sps, sz); pos += sz;
+
+  result[pos++] = 1;
+  sz = end - pps;
+  result[pos++] = static_cast<const char>(sz >> 8);
+  result[pos++] = static_cast<const char>(sz & 0xFF);
+  result.replace(pos, sz, (const char*)pps, sz); pos += sz;
+
+  return result;
 }

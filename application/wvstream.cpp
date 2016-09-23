@@ -16,7 +16,8 @@
 #include <thread>
 #include <string.h>
 #include <sstream>
-
+#include <deque>
+#include <stdarg.h>
 #include "dash/DASHTree.h"
 #include "dash/DASHStream.h"
 #include "cdm/media/cdm/cdm_adapter.h"
@@ -87,11 +88,13 @@ class WV_CencSingleSampleDecrypter : public AP4_CencSingleSampleDecrypter
 {
 public:
 	// methods
+	
 	WV_CencSingleSampleDecrypter(media::CdmAdapter *adapter) :
 		AP4_CencSingleSampleDecrypter(0),
 		wv_adapter(adapter),
 		max_subsample_count_(0),
 		subsample_buffer_(0) {};
+	bool initialized()const { return wv_adapter != 0; };
 	virtual AP4_Result DecryptSampleData(AP4_DataBuffer& data_in,
 		AP4_DataBuffer& data_out,
 
@@ -111,6 +114,8 @@ private:
 	media::CdmAdapter *wv_adapter;
 	unsigned int max_subsample_count_;
 	cdm::SubsampleEntry *subsample_buffer_;
+	
+
 };
 
 /*----------------------------------------------------------------------
@@ -126,7 +131,6 @@ AP4_Result WV_CencSingleSampleDecrypter::DecryptSampleData(
 {
 	// the output has the same size as the input
 	data_out.SetDataSize(data_in.GetDataSize());
-
 	if (!wv_adapter)
 	{
 		data_out.SetData(data_in.GetData(), data_in.GetDataSize());
@@ -137,6 +141,7 @@ AP4_Result WV_CencSingleSampleDecrypter::DecryptSampleData(
 	if (iv == NULL) return AP4_ERROR_INVALID_PARAMETERS;
 	if (subsample_count) {
 		if (bytes_of_cleartext_data == NULL || bytes_of_encrypted_data == NULL) {
+			std::cout << "AP4_ERROR_INVALID_PARAMETERS"<< std::endl;
 			return AP4_ERROR_INVALID_PARAMETERS;
 		}
 	}
@@ -167,8 +172,8 @@ AP4_Result WV_CencSingleSampleDecrypter::DecryptSampleData(
 	cdm_out.SetDecryptedBuffer(&buf);
 
 	cdm::Status ret = wv_adapter->Decrypt(cdm_in, &cdm_out);
-
 	return AP4_SUCCESS;
+	
 }
 
 /*******************************************************
@@ -257,11 +262,7 @@ public:
 			bytesToWrite -= bytesWritten;
 			b += bytesWritten;
 		}
-		#ifdef OS_WIN
 		while (bytesToWrite && (nWritten = send(socket_, b, bytesToWrite, MSG_NOSIGNAL)) != SOCKET_ERROR)
-		#elif defined(__APPLE__)
-		while (bytesToWrite && (nWritten = send(socket_, b, bytesToWrite, SO_NOSIGPIPE)) != SOCKET_ERROR)
-		#endif
 		{
 			bytesToWrite -= nWritten;
 			b += nWritten;
@@ -322,7 +323,7 @@ protected:
 /*******************************************************
 Main class Session
 ********************************************************/
-class Session : public dash::DASHStreamObserver, public AP4_ByteStreamObserver
+class Session : public dash::DASHStreamObserver, public AP4_ByteStreamObserver, public media::CdmAdapterClient
 {
 public:
 	Session(uint32_t session_id, const char *mpdURL, const char *licenseURL);
@@ -338,7 +339,11 @@ public:
 	void OnStreamChange(dash::DASHStream *stream, uint32_t segment)override;
 	//Override from AP4SocketStreamObserver
 	AP4_Result OnFlush(AP4_ByteStream *stream)override;
-
+	virtual void OnCDMMessage(media::CdmAdapterClient::CDMADPMSG msg) override
+	  {
+		std::cout << "OnCDMMessage: " << msg << " " << std::endl;
+		messages_.push_back(msg);
+	  };
 private:
 	void thread_play(AP4_Position byteOffset);
 
@@ -347,33 +352,26 @@ private:
 
 	std::string wvLicenseURL_;
 	std::string mpdFileURL_;
-
+	std::string pssh_, license_url_;
 	dash::DASHTree dashtree_;
 	dash::DASHStream video_, audio_;
-
+	bool SendSessionMessage();
 	media::CdmAdapter *wvadapter_;
-
 	AP4_ByteStream *video_input_, *audio_input_;
-
+	std::deque<media::CdmAdapterClient::CDMADPMSG> messages_;
 	uint16_t width_, height_;
 	std::string language_;
 	uint32_t fixed_bandwidth_;
 
 	AP4_ProtectionKeyMap key_map_;
 	AP4_Processor *processor_;
-
+	AP4_UI16 key_size_;
+	const AP4_UI08 *key_;
 	uint32_t current_segment_[dash::DASHTree::STREAM_TYPE_COUNT];
 	bool stream_changed_;
-
-#ifdef SEPARATE_STREAMS
-	AP4_ByteStream *video_output_;
-	AP4_ByteStream *audio_output_;
-#elif MUXED_STREAM
-	AP4_ByteStream *muxed_output_;
-#else
 	std::thread *thread_;
 	int socket_desc_;
-#endif
+
 };
 
 Session::Session(uint32_t session_id, const char *mpdURL, const char *licenseURL)
@@ -381,8 +379,8 @@ Session::Session(uint32_t session_id, const char *mpdURL, const char *licenseURL
 	, session_expiation_(media::gtc() + 600000)
 	, wvLicenseURL_(licenseURL)
 	, mpdFileURL_(mpdURL)
-	, width_(1280)
-	, height_(720)
+	, width_(1920)
+	, height_(1080)
 	, language_("de")
 	, fixed_bandwidth_(0)
 	, video_(dashtree_, dash::DASHTree::VIDEO)
@@ -434,6 +432,8 @@ Session::Session(uint32_t session_id, const char *encoded)
 		unsigned int newLen(4096);
 		if (b64_decode(strF + 7, strE - strF - 7, buffer, newLen))
 			wvLicenseURL_ = std::string((const char*)buffer, newLen);
+			
+			
 	}
 }
 
@@ -463,36 +463,47 @@ static size_t write_license(void *buffer, size_t size, size_t nmemb, void *dest)
 bool Session::setup_widevine(const uint8_t *init_data, const unsigned int init_data_size)
 {
 
-	wvadapter_ = new media::CdmAdapter("com.widevine.alpha", widevinedll, media::CdmConfig());
+	wvadapter_ = new media::CdmAdapter("com.widevine.alpha", widevinedll, "", media::CdmConfig(false, true),*(dynamic_cast<media::CdmAdapterClient*>(this)));
+	std::cout << "wvAdapter init: " << widevinedll << " " << std::endl;
+	std::cout << "wvAdapter init init_data: " << init_data << " " << std::endl;
+	std::cout << "wvAdapter init init_data_size: " << init_data_size << " " << std::endl;
 	if (!wvadapter_->valid())
 	{
 		std::cout << "ERROR: Unable to load widevine shared library" << std::endl;
 		return false;
 	}
-
+	
 	if (init_data_size > 256)
 	{
 		std::cout << "ERROR: init_data with length: " << init_data_size << " seems not to be cenc init data!" << std::endl;
 		return false;
 	}
-
+	std::cout << "wvAdapter init Done!" << std::endl;
 	// This will request a new session and initializes session_id and message members in cdm_adapter.
 	// message will be used to create a license request in the step after CreateSession call.
 	// Initialization data is the widevine cdm pssh code in google proto style found in mpd schemeIdUri
 	unsigned int buf_size = 32 + init_data_size;
-	uint8_t buf[1024] = { 0x00, 0x00, 0x00, 0x63, 0x70, 0x73, 0x73, 0x68, 0x00, 0x00, 0x00, 0x00, 0xed, 0xef, 0x8b, 0xa9,
-		0x79, 0xd6, 0x4a, 0xce, 0xa3, 0xc8, 0x27, 0xdc, 0xd5, 0x1d, 0x21, 0xed, 0x00, 0x00, 0x00, 0x43 };
-
+	std::cout << "wvAdapter init buf_size: " << buf_size << " " << std::endl;
+	uint8_t buf[1024];
+	static uint8_t proto[] = { 0x00, 0x00, 0x00, 0x63, 0x70, 0x73, 0x73, 0x68, 0x00, 0x00, 0x00, 0x00, 0xed, 0xef, 0x8b, 0xa9,
+    0x79, 0xd6, 0x4a, 0xce, 0xa3, 0xc8, 0x27, 0xdc, 0xd5, 0x1d, 0x21, 0xed, 0x00, 0x00, 0x00, 0x00 };
+	proto[3] = static_cast<uint8_t>(buf_size);
+	proto[31] = static_cast<uint8_t>(init_data_size);
+	std::cout << "wvAdapter init sizeof(proto): " << sizeof(proto) << " " << std::endl;
+	std::cout << "wvAdapter init proto: " << proto << " " << std::endl;
+	memcpy(buf, proto, sizeof(proto));
 	memcpy(&buf[32], init_data, init_data_size);
-
+	std::cout << "wvAdapter init buf_size: " << buf << " " << std::endl;
 	wvadapter_->CreateSessionAndGenerateRequest(0, cdm::SessionType::kTemporary, cdm::InitDataType::kCenc, buf, buf_size);
-
+	
 	if (wvadapter_->SessionValid())
 	{
 		std::string license, challenge(b64_encode(wvadapter_->GetMessage(), wvadapter_->GetMessageSize(), true));
+		
 		challenge = "widevine2Challenge=" + challenge;
 		challenge += "&includeHdcpTestKeyInLicense=true";
-
+		std::cout << "License: " << license  << std::endl;
+		std::cout << "Challenge: " << challenge  << std::endl;
 		static const unsigned int numDefaultHeaders(6);
 		static const char* licHeaders[numDefaultHeaders] = {
 			"Accept: application/json",
@@ -500,7 +511,7 @@ bool Session::setup_widevine(const uint8_t *init_data, const unsigned int init_d
 			"Cache-Control: no-cache",
 			"Content-Type: application/x-www-form-urlencoded",
 			"Accept-Encoding: gzip, deflate",
-			"EXPECT:"
+			"expect:"
 		};
 
 		// Get the license
@@ -509,10 +520,11 @@ bool Session::setup_widevine(const uint8_t *init_data, const unsigned int init_d
 		struct curl_slist *headerlist = NULL;
 		for (unsigned int i(0); i < numDefaultHeaders; ++i)
 			headerlist = curl_slist_append(headerlist, licHeaders[i]);
-
+		std::cout << "wvLicenseURL_: " << wvLicenseURL_.c_str() << " " << std::endl;
 		CURL *curl = curl_easy_init();
 		curl_easy_setopt(curl, CURLOPT_URL, wvLicenseURL_.c_str());
 		curl_easy_setopt(curl, CURLOPT_POST, 1L);
+
 		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headerlist);
 		/* Set the form info */
 		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, challenge.c_str());
@@ -526,7 +538,7 @@ bool Session::setup_widevine(const uint8_t *init_data, const unsigned int init_d
 		/* Automaticlly decompress gzipped responses */
 		curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "gzip");
 		CURLcode res = curl_easy_perform(curl);
-
+		
 		if (res != CURLE_OK)
 		{
 			stop();
@@ -554,7 +566,18 @@ bool Session::setup_widevine(const uint8_t *init_data, const unsigned int init_d
 		buf_size = 1024;
 		b64_decode(license.c_str() + licStartPos, licEndPos - licStartPos, buf, buf_size);
 		wvadapter_->UpdateSession(buf, buf_size);
-
+		
+		std::cout << "INFO: License received:" << license.c_str() << std::endl;
+		std::cout << "INFO: licStartPos:" << licStartPos << std::endl;
+		std::cout << "INFO: licEndPos:" << licEndPos << std::endl;
+		std::cout << "INFO: License decoded:" << buf << std::endl;
+		if (!wvadapter_->KeyIdValid())
+		{
+			stop();
+			std::cout << "INFO: License update not successful" << std::endl;
+			return false;
+		}
+		return true;
 		if (!wvadapter_->KeyIdValid())
 		{
 			stop();
@@ -564,6 +587,8 @@ bool Session::setup_widevine(const uint8_t *init_data, const unsigned int init_d
 		return true;
 	}
 	else
+		std::cout << "ERROR: WV sessionrequest invalid!" << std::endl;
+	return false;
 		std::cout << "ERROR: WV sessionrequest invalid!" << std::endl;
 	return false;
 }
@@ -589,6 +614,7 @@ bool Session::initialize()
 		std::cout << "ERROR: Could not open / parse mpdURL (" << mpdFileURL_ << ")" << std::endl;
 		return false;
 	}
+	std::cout << "mpdURL (" << mpdFileURL_ << ")" << std::endl;
 	std::cout << "Info: Successfully parsed .mpd file. Download speed: " << dashtree_.download_speed_ << "Bytes/s" << std::endl;
 
 	if (dashtree_.pssh_.empty() || dashtree_.pssh_ == "FILE")
@@ -613,7 +639,7 @@ void Session::thread_play(AP4_Position byteOffset)
 	std::cout << "INFO: thread for session-id: " << session_id_ << " started" << std::endl;
 	AP4_SockStream sock_output(socket_desc_, byteOffset);
 	sock_output.SetObserver(dynamic_cast<AP4_ByteStreamObserver*>(this));
-	std::string ret("HTTP/1.1 200 OK\r\nContent-Type: video/quicktime\r\n\r\n");
+	std::string ret("HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\n\r\n");
 	send(socket_desc_, ret.c_str(), ret.size(), 0);
 	AP4_Array<AP4_ByteStream*> streams;
 	streams.SetItemCount(2);
@@ -628,6 +654,7 @@ void Session::thread_play(AP4_Position byteOffset)
 			audio_.start_stream(current_segment_[dash::DASHTree::AUDIO]);
 			video_.start_stream(current_segment_[dash::DASHTree::VIDEO]);
 			result = processor_->Mux(streams, sock_output, 2, NULL);
+			std::cout << "INFO: playing: " << session_id_ << "" << std::endl;
 		}
 	} while (result == AP4_ERROR_STREAM_CHANGED);
 
@@ -663,14 +690,14 @@ void Session::thread_play(AP4_Position byteOffset)
 bool Session::play(int socket_desc, AP4_Position byteOffset)
 {
 	stop();
-
+	std::cout << "Start Playing" << std::endl;
 	if (!video_.prepare_stream(width_, height_, 0, fixed_bandwidth_))
 	{
 		std::cout << "ERROR: Could not prepare video stream" << std::endl;
 		return false;
 	}
 	video_input_ = new AP4_DASHStream(&video_);
-
+	
 	//if no pssh data was in .mpd file but we have encrypted data, take it from video file
 	if (!wvadapter_ && dashtree_.pssh_ == "FILE")
 	{
@@ -698,6 +725,7 @@ bool Session::play(int socket_desc, AP4_Position byteOffset)
 		if (!setup_widevine((const uint8_t*)license.data(), license.size()))
 			return false;
 		video_input_->Seek(0);
+		std::cout << "video_input_->Seek(0);" << std::endl;
 	}
 
 	if (!audio_.prepare_stream(0, 0, language_.c_str(), fixed_bandwidth_))
@@ -707,12 +735,13 @@ bool Session::play(int socket_desc, AP4_Position byteOffset)
 	}
 	audio_input_ = new AP4_DASHStream(&audio_);
 
-
 #ifdef SEPARATE_STREAMS
-	AP4_FileByteStream::Create("./video.mov", AP4_FileByteStream::STREAM_MODE_WRITE, video_output_);
-	AP4_FileByteStream::Create("./audio.mov", AP4_FileByteStream::STREAM_MODE_WRITE, audio_output_);
+	std::cout << "SEPARATE_STREAMS" << std::endl;
+	AP4_FileByteStream::Create("C:\\Temp\\video.mov", AP4_FileByteStream::STREAM_MODE_WRITE, video_output_);
+	AP4_FileByteStream::Create("C:\\Temp\\audio.mov", AP4_FileByteStream::STREAM_MODE_WRITE, audio_output_);
 #elif MUXED_STREAM
-	AP4_FileByteStream::Create("./muxed.mov", AP4_FileByteStream::STREAM_MODE_WRITE, muxed_output_);
+	std::cout << "MUXED_STREAM" << std::endl;
+	AP4_FileByteStream::Create("/tmp/muxed.mov", AP4_FileByteStream::STREAM_MODE_WRITE, muxed_output_);
 	muxed_output_->SetObserver(this);
 #endif
 
@@ -749,6 +778,7 @@ bool Session::play(int socket_desc, AP4_Position byteOffset)
 #else
 	socket_desc_ = socket_desc;
 	thread_ = new std::thread(&Session::thread_play, this, byteOffset);
+	std::cout << "direct play" << std::endl;
 	return true;
 #endif
 	return result == AP4_SUCCESS;
@@ -805,6 +835,7 @@ AP4_Result Session::OnFlush(AP4_ByteStream *stream)
 		 - if there was a change -> call DASHStream::select_stream(force) to prepare every stream
 		 - if Mux(2) returns EOS and we have changes we will continue in thread_play
 		 */
+	std::cout << "OnFlush: ";
 #if MUXED_STREAM
 	static uint32_t counter(0);
 	if (++counter == 10)
@@ -816,7 +847,7 @@ AP4_Result Session::OnFlush(AP4_ByteStream *stream)
 	return AP4_SUCCESS;
 }
 
-#if !defined SEPARATE_STREAMS && !defined MUXED_STREAM
+#if !defined SEPARATE_STREAMS && !defined MUXED_STREAM 
 
 int main(int argc, char *argv[])
 {
@@ -917,6 +948,10 @@ int main(int argc, char *argv[])
 				}
 				else
 					std::cout << "ERROR: Unable to find stream with session_id: " << sid << std::endl;
+			}
+			else if (strncmp(strMessage.c_str(), "GET /shutdown?", 14) == 0)
+			{
+			
 			}
 			else if (strncmp(strMessage.c_str(), "GET /close?", 11) == 0)
 			{
