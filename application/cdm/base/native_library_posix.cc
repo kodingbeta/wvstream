@@ -26,7 +26,7 @@ NativeLibrary LoadNativeLibrary(const std::string& library_path,
   if (!dl && error)
     error->message = dlerror();
 
-  return reinterpret_cast<NativeLibrary>(dl);
+  return dl;
 }
 
 // static
