@@ -558,7 +558,7 @@ end(void *data, const char *el)
 
 						if (!tpl.media.empty() && dash->overallSeconds_ > 0 && tpl.timescale > 0 && (tpl.duration > 0 || dash->current_adaptationset_->segment_durations_.size()))
 						{
-							unsigned int countSegs = !dash->current_adaptationset_->segment_durations_.data.empty() ? dash->current_adaptationset_->segment_durations_.size() : (unsigned int)(dash->overallSeconds_ / (((double)tpl.duration) / tpl.timescale)) + 1;
+							unsigned int countSegs = !dash->current_adaptationset_->segment_durations_.empty() ? dash->current_adaptationset_->segment_durations_.size() : (unsigned int)(dash->overallSeconds_ / (((double)tpl.duration) / tpl.timescale)) + 1;
 
 							if (countSegs < 65536)
 							{
@@ -651,6 +651,8 @@ end(void *data, const char *el)
 				}
 			}
 		}
+	}
+}
 
 		/*----------------------------------------------------------------------
 |   curl callback
