@@ -415,6 +415,7 @@ start(void *data, const char *el, const char **attr)
 		else if (strcmp(el, "Period") == 0)
 		{
 			dash->current_period_ = new DASHTree::Period();
+			dash->current_period_->base_url_ = dash->base_url_;
 			dash->periods_.push_back(dash->current_period_);
 			dash->currentNode_ |= DASHTree::MPDNODE_PERIOD;
 		}
