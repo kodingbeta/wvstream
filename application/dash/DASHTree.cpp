@@ -11,6 +11,7 @@
 
 #include <string>
 #include <cstring>
+#include <iostream>
 
 #include "DASHTree.h"
 #include "../../libcurl/include/curl/curl.h"
@@ -57,6 +58,7 @@ static uint8_t GetChannels(const char **attr)
 
 static void ParseSegmentTemplate(const char **attr, std::string baseURL, DASHTree::SegmentTemplate &tpl, bool adp)
 {
+  std::cout << "INFO: Parse Template : " << attr << std::endl;
   uint64_t pto(0);
   for (; *attr;)
   {
@@ -104,7 +106,7 @@ static void XMLCALL
 start(void *data, const char *el, const char **attr)
 {
 	DASHTree *dash(reinterpret_cast<DASHTree *>(data));
-
+	std::cout << "INFO: Current Node : " << dash->currentNode_ << std::endl;
 	if (dash->currentNode_ & DASHTree::MPDNODE_MPD)
 	{
 		if (dash->currentNode_ & DASHTree::MPDNODE_PERIOD)
@@ -274,6 +276,7 @@ start(void *data, const char *el, const char **attr)
 						}
 						else if (strcmp(el, "SegmentTemplate") == 0)
 						{
+							std::cout << "INFO: Current Element : " << el << std::endl;
 							dash->current_representation_->segtpl_ = dash->current_adaptationset_->segtpl_;
 
 							ParseSegmentTemplate(attr, dash->current_representation_->url_, dash->current_representation_->segtpl_, false);
