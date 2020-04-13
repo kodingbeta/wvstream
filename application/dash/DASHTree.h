@@ -105,6 +105,7 @@ public:
 		uint32_t timescale_;
 		std::string language_;
 		std::string mimeType_;
+		std::string base_url_;
 		std::vector<Representation *> repesentations_;
 		std::vector<uint32_t> segment_durations_;
 		SegmentTemplate segtpl_;
@@ -120,7 +121,7 @@ public:
 				delete *b;
 		};
 		std::vector<AdaptationSet *> adaptationSets_;
-
+		std::string base_url_;
 	} * current_period_;
 
 	std::vector<Period *> periods_;

@@ -331,6 +331,12 @@ start(void *data, const char *el, const char **attr)
 					if (strcmp(el, "cenc:pssh") == 0)
 						dash->currentNode_ |= DASHTree::MPDNODE_PSSH;
 				}
+				else if (strcmp(el, "SegmentTemplate") == 0)
+				{
+					ParseSegmentTemplate(attr, dash->current_adaptationset_->base_url_, dash->current_adaptationset_->segtpl_, true);
+					dash->current_adaptationset_->timescale_ = dash->current_adaptationset_->segtpl_.timescale;
+					dash->currentNode_ |= DASHTree::MPDNODE_SEGMENTTEMPLATE;
+				}
 				else if (strcmp(el, "Representation") == 0)
 				{
 					dash->current_representation_ = new DASHTree::Representation();
@@ -379,6 +385,7 @@ start(void *data, const char *el, const char **attr)
 				//<AdaptationSet contentType="video" group="2" lang="en" mimeType="video/mp4" par="16:9" segmentAlignment="true" startWithSAP="1" subsegmentAlignment="true" subsegmentStartsWithSAP="1">
 				dash->current_adaptationset_ = new DASHTree::AdaptationSet();
 				dash->current_period_->adaptationSets_.push_back(dash->current_adaptationset_);
+				dash->current_adaptationset_->base_url_ = dash->current_period_->base_url_;
 				dash->adp_pssh_.clear();
 				for (; *attr;)
 				{
@@ -466,6 +473,7 @@ end(void *data, const char *el)
 						if (strcmp(el, "BaseURL") == 0)
 						{
 							dash->current_representation_->url_ = dash->base_url_ + dash->strXMLText_;
+							dash->current_adaptationset_->base_url_ = dash->current_period_->base_url_ + dash->strXMLText_;
 							dash->currentNode_ &= ~DASHTree::MPDNODE_BASEURL;
 						}
 					}
