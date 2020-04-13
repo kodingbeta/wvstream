@@ -552,202 +552,204 @@ end(void *data, const char *el)
 						}
 					}
 					else if (strcmp(el, "Representation") == 0)
-						dash->currentNode_ &= ~DASHTree::MPDNODE_REPRESENTATION;
-					if (dash->current_representation_->segments_.empty())
 					{
-						bool isSegmentTpl(!dash->current_representation_->segtpl_.media.empty());
-						DASHTree::SegmentTemplate &tpl(isSegmentTpl ? dash->current_representation_->segtpl_ : dash->current_adaptationset_->segtpl_);
-
-						if (!tpl.media.empty() && dash->overallSeconds_ > 0 && tpl.timescale > 0 && (tpl.duration > 0 || dash->current_adaptationset_->segment_durations_.size()))
+						dash->currentNode_ &= ~DASHTree::MPDNODE_REPRESENTATION;
+						if (dash->current_representation_->segments_.empty())
 						{
-							unsigned int countSegs = !dash->current_adaptationset_->segment_durations_.empty() ? dash->current_adaptationset_->segment_durations_.size() : (unsigned int)(dash->overallSeconds_ / (((double)tpl.duration) / tpl.timescale)) + 1;
+							bool isSegmentTpl(!dash->current_representation_->segtpl_.media.empty());
+							DASHTree::SegmentTemplate &tpl(isSegmentTpl ? dash->current_representation_->segtpl_ : dash->current_adaptationset_->segtpl_);
 
-							if (countSegs < 65536)
+							if (!tpl.media.empty() && dash->overallSeconds_ > 0 && tpl.timescale > 0 && (tpl.duration > 0 || dash->current_adaptationset_->segment_durations_.size()))
 							{
-								DASHTree::Segment seg;
-								seg.range_begin_ = ~0;
+								unsigned int countSegs = !dash->current_adaptationset_->segment_durations_.empty() ? dash->current_adaptationset_->segment_durations_.size() : (unsigned int)(dash->overallSeconds_ / (((double)tpl.duration) / tpl.timescale)) + 1;
 
-								dash->current_representation_->flags_ |= DASHTree::Representation::TEMPLATE;
-
-								dash->current_representation_->segments_.reserve(countSegs);
-								if (!tpl.initialization.empty())
+								if (countSegs < 65536)
 								{
-									seg.range_end_ = ~0;
-									if (!isSegmentTpl)
+									DASHTree::Segment seg;
+									seg.range_begin_ = ~0;
+
+									dash->current_representation_->flags_ |= DASHTree::Representation::TEMPLATE;
+
+									dash->current_representation_->segments_.reserve(countSegs);
+									if (!tpl.initialization.empty())
 									{
-										dash->current_representation_->url_ += tpl.initialization;
-										ReplacePlaceHolders(dash->current_representation_->url_, dash->current_representation_->id, dash->current_representation_->bandwidth_);
-										dash->current_representation_->segtpl_.media = tpl.media;
-										ReplacePlaceHolders(dash->current_representation_->segtpl_.media, dash->current_representation_->id, dash->current_representation_->bandwidth_);
+										seg.range_end_ = ~0;
+										if (!isSegmentTpl)
+										{
+											dash->current_representation_->url_ += tpl.initialization;
+											ReplacePlaceHolders(dash->current_representation_->url_, dash->current_representation_->id, dash->current_representation_->bandwidth_);
+											dash->current_representation_->segtpl_.media = tpl.media;
+											ReplacePlaceHolders(dash->current_representation_->segtpl_.media, dash->current_representation_->id, dash->current_representation_->bandwidth_);
+										}
+
+										dash->current_representation_->initialization_ = seg;
+										dash->current_representation_->flags_ |= DASHTree::Representation::INITIALIZATION;
 									}
 
-									dash->current_representation_->initialization_ = seg;
-									dash->current_representation_->flags_ |= DASHTree::Representation::INITIALIZATION;
+									std::vector<uint32_t>::const_iterator sdb(dash->current_adaptationset_->segment_durations_.begin()),
+										sde(dash->current_adaptationset_->segment_durations_.end());
+									bool timeBased = sdb != sde && tpl.media.find("$Time") != std::string::npos;
+									if (timeBased)
+										dash->current_representation_->flags_ |= DASHTree::Representation::TIMETEMPLATE;
+
+									seg.range_end_ = timeBased ? dash->current_adaptationset_->startPTS_ : tpl.startNumber;
+									seg.startPTS_ = dash->current_adaptationset_->startPTS_;
+
+									if (!timeBased && dash->available_time_ && dash->stream_start_ - dash->available_time_ > dash->overallSeconds_) //we need to adjust the start-segment
+										seg.range_end_ += ((dash->stream_start_ - dash->available_time_ - dash->overallSeconds_) * tpl.timescale) / tpl.duration;
+
+									for (; countSegs; --countSegs)
+									{
+										dash->current_representation_->segments_.push_back(seg);
+										seg.startPTS_ += (sdb != sde) ? *sdb : tpl.duration;
+										seg.range_end_ += timeBased ? *(sdb++) : 1;
+									}
+									return;
 								}
-
-								std::vector<uint32_t>::const_iterator sdb(dash->current_adaptationset_->segment_durations_.begin()),
-									sde(dash->current_adaptationset_->segment_durations_.end());
-								bool timeBased = sdb != sde && tpl.media.find("$Time") != std::string::npos;
-								if (timeBased)
-									dash->current_representation_->flags_ |= DASHTree::Representation::TIMETEMPLATE;
-
-								seg.range_end_ = timeBased ? dash->current_adaptationset_->startPTS_ : tpl.startNumber;
-								seg.startPTS_ = dash->current_adaptationset_->startPTS_;
-
-								if (!timeBased && dash->available_time_ && dash->stream_start_ - dash->available_time_ > dash->overallSeconds_) //we need to adjust the start-segment
-									seg.range_end_ += ((dash->stream_start_ - dash->available_time_ - dash->overallSeconds_) * tpl.timescale) / tpl.duration;
-
-								for (; countSegs; --countSegs)
-								{
-									dash->current_representation_->segments_.push_back(seg);
-									seg.startPTS_ += (sdb != sde) ? *sdb : tpl.duration;
-									seg.range_end_ += timeBased ? *(sdb++) : 1;
-								}
-								return;
 							}
-						}
-						else if (dash->currentNode_ & DASHTree::MPDNODE_SEGMENTDURATIONS)
-						{
-							if (strcmp(el, "SegmentDurations") == 0)
-								dash->currentNode_ &= ~DASHTree::MPDNODE_SEGMENTDURATIONS;
-						}
-						else if (dash->currentNode_ & DASHTree::MPDNODE_CONTENTPROTECTION)
-						{
-							if (dash->currentNode_ & DASHTree::MPDNODE_PSSH)
+							else if (dash->currentNode_ & DASHTree::MPDNODE_SEGMENTDURATIONS)
 							{
-								if (strcmp(el, "cenc:pssh") == 0)
+								if (strcmp(el, "SegmentDurations") == 0)
+									dash->currentNode_ &= ~DASHTree::MPDNODE_SEGMENTDURATIONS;
+							}
+							else if (dash->currentNode_ & DASHTree::MPDNODE_CONTENTPROTECTION)
+							{
+								if (dash->currentNode_ & DASHTree::MPDNODE_PSSH)
 								{
-									dash->adp_pssh_ = dash->strXMLText_;
-									dash->currentNode_ &= ~DASHTree::MPDNODE_PSSH;
+									if (strcmp(el, "cenc:pssh") == 0)
+									{
+										dash->adp_pssh_ = dash->strXMLText_;
+										dash->currentNode_ &= ~DASHTree::MPDNODE_PSSH;
+									}
+								}
+								else if (strcmp(el, "ContentProtection") == 0)
+								{
+									if (dash->adp_pssh_.empty())
+										dash->adp_pssh_ = "FILE";
+									dash->currentNode_ &= ~DASHTree::MPDNODE_CONTENTPROTECTION;
 								}
 							}
-							else if (strcmp(el, "ContentProtection") == 0)
+							else if (strcmp(el, "AdaptationSet") == 0)
 							{
-								if (dash->adp_pssh_.empty())
-									dash->adp_pssh_ = "FILE";
-								dash->currentNode_ &= ~DASHTree::MPDNODE_CONTENTPROTECTION;
+								if (!dash->pssh_.empty() && dash->adp_pssh_ != dash->pssh_)
+									dash->current_period_->adaptationSets_.pop_back();
+								else
+									dash->pssh_ = dash->adp_pssh_;
+								dash->currentNode_ &= ~DASHTree::MPDNODE_ADAPTIONSET;
 							}
 						}
-						else if (strcmp(el, "AdaptationSet") == 0)
+						else
 						{
-							if (!dash->pssh_.empty() && dash->adp_pssh_ != dash->pssh_)
-								dash->current_period_->adaptationSets_.pop_back();
-							else
-								dash->pssh_ = dash->adp_pssh_;
-							dash->currentNode_ &= ~DASHTree::MPDNODE_ADAPTIONSET;
+							ReplacePlaceHolders(dash->current_representation_->url_, dash->current_representation_->id, dash->current_representation_->bandwidth_);
+							ReplacePlaceHolders(dash->current_representation_->segtpl_.media, dash->current_representation_->id, dash->current_representation_->bandwidth_);
 						}
 					}
-					else
+					else if (strcmp(el, "Period") == 0)
 					{
-						ReplacePlaceHolders(dash->current_representation_->url_, dash->current_representation_->id, dash->current_representation_->bandwidth_);
-						ReplacePlaceHolders(dash->current_representation_->segtpl_.media, dash->current_representation_->id, dash->current_representation_->bandwidth_);
+						dash->currentNode_ &= ~DASHTree::MPDNODE_PERIOD;
 					}
-				}
-				else if (strcmp(el, "Period") == 0)
-				{
-					dash->currentNode_ &= ~DASHTree::MPDNODE_PERIOD;
-				}
-				else if (strcmp(el, "MPD") == 0)
-				{
-					dash->currentNode_ &= ~DASHTree::MPDNODE_MPD;
+					else if (strcmp(el, "MPD") == 0)
+					{
+						dash->currentNode_ &= ~DASHTree::MPDNODE_MPD;
+					}
 				}
 			}
 		}
 	}
 }
 
-		/*----------------------------------------------------------------------
+	/*----------------------------------------------------------------------
 |   curl callback
 +---------------------------------------------------------------------*/
 
-		static size_t curl_fwrite(void *buffer, size_t size, size_t nmemb, void *dest)
-		{
-			XML_Parser parser(reinterpret_cast<XML_Parser>(dest));
+	static size_t curl_fwrite(void *buffer, size_t size, size_t nmemb, void *dest)
+	{
+		XML_Parser parser(reinterpret_cast<XML_Parser>(dest));
 
-			bool done(false);
-			if (XML_Parse(parser, (const char *)buffer, size * nmemb, done) == XML_STATUS_ERROR)
-				return 0;
-			return size * nmemb;
-		}
+		bool done(false);
+		if (XML_Parse(parser, (const char *)buffer, size * nmemb, done) == XML_STATUS_ERROR)
+			return 0;
+		return size * nmemb;
+	}
 
-		/*----------------------------------------------------------------------
+	/*----------------------------------------------------------------------
 |   DASHTree
 +---------------------------------------------------------------------*/
 
-		void DASHTree::Segment::SetRange(const char *range)
+	void DASHTree::Segment::SetRange(const char *range)
+	{
+		const char *delim(strchr(range, '-'));
+		if (delim)
 		{
-			const char *delim(strchr(range, '-'));
-			if (delim)
-			{
-				range_begin_ = strtoull(range, 0, 10);
-				range_end_ = strtoull(delim + 1, 0, 10);
-			}
-			else
-				range_begin_ = range_end_ = 0;
+			range_begin_ = strtoull(range, 0, 10);
+			range_end_ = strtoull(delim + 1, 0, 10);
 		}
+		else
+			range_begin_ = range_end_ = 0;
+	}
 
-		bool DASHTree::open(const char *url)
-		{
-			XML_Parser p = XML_ParserCreate(NULL);
-			if (!p)
-				return false;
-			XML_SetUserData(p, (void *)this);
-			XML_SetElementHandler(p, start, end);
-			XML_SetCharacterDataHandler(p, text);
-			currentNode_ = 0;
-			strXMLText_.clear();
-
-			struct curl_slist *headerlist = NULL;
-
-			curl_global_init(CURL_GLOBAL_ALL);
-
-			headerlist = curl_slist_append(headerlist, "Accept: */*");
-			headerlist = curl_slist_append(headerlist, "Connection: close");
-			headerlist = curl_slist_append(headerlist, "Pragma: no-cache");
-			headerlist = curl_slist_append(headerlist, "Cache-Control: no-cache");
-			headerlist = curl_slist_append(headerlist, "x-retry-count: 0");
-			headerlist = curl_slist_append(headerlist, "x-request-priority: CRITICAL");
-			headerlist = curl_slist_append(headerlist, "Accept-Encoding: gzip, deflate");
-			headerlist = curl_slist_append(headerlist, "Accept-Language: de-DE,de;q=0.8,en-US;q=0.6,en;q=0.4");
-			headerlist = curl_slist_append(headerlist, "EXPECT:");
-
-			CURL *curl = curl_easy_init();
-			curl_easy_setopt(curl, CURLOPT_URL, url);
-			curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headerlist);
-			/* Define our callback to get called when there's data to be written */
-			curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_fwrite);
-			/* Set a pointer to our struct to pass to the callback */
-			curl_easy_setopt(curl, CURLOPT_WRITEDATA, p);
-			/* Automaticlly decompress gzipped responses */
-			curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "gzip");
-			CURLcode res = curl_easy_perform(curl);
-
-			download_speed_ = 0.0;
-			curl_easy_getinfo(curl, CURLINFO_SPEED_DOWNLOAD, &download_speed_);
-
-			curl_easy_cleanup(curl);
-
-			XML_ParserFree(p);
-
-			if (res != CURLE_OK)
-				return false;
-			return true;
-		}
-
-		bool DASHTree::has_type(StreamType t)
-		{
-			if (periods_.empty())
-				return false;
-
-			for (std::vector<AdaptationSet *>::const_iterator b(periods_[0]->adaptationSets_.begin()), e(periods_[0]->adaptationSets_.end()); b != e; ++b)
-				if ((*b)->type_ == t)
-					return true;
+	bool DASHTree::open(const char *url)
+	{
+		XML_Parser p = XML_ParserCreate(NULL);
+		if (!p)
 			return false;
-		}
+		XML_SetUserData(p, (void *)this);
+		XML_SetElementHandler(p, start, end);
+		XML_SetCharacterDataHandler(p, text);
+		currentNode_ = 0;
+		strXMLText_.clear();
 
-		uint32_t DASHTree::estimate_segcount(uint32_t duration, uint32_t timescale)
-		{
-			double tmp(duration);
-			duration /= timescale;
-			return static_cast<uint32_t>((overallSeconds_ / duration) * 1.01);
-		}
+		struct curl_slist *headerlist = NULL;
+
+		curl_global_init(CURL_GLOBAL_ALL);
+
+		headerlist = curl_slist_append(headerlist, "Accept: */*");
+		headerlist = curl_slist_append(headerlist, "Connection: close");
+		headerlist = curl_slist_append(headerlist, "Pragma: no-cache");
+		headerlist = curl_slist_append(headerlist, "Cache-Control: no-cache");
+		headerlist = curl_slist_append(headerlist, "x-retry-count: 0");
+		headerlist = curl_slist_append(headerlist, "x-request-priority: CRITICAL");
+		headerlist = curl_slist_append(headerlist, "Accept-Encoding: gzip, deflate");
+		headerlist = curl_slist_append(headerlist, "Accept-Language: de-DE,de;q=0.8,en-US;q=0.6,en;q=0.4");
+		headerlist = curl_slist_append(headerlist, "EXPECT:");
+
+		CURL *curl = curl_easy_init();
+		curl_easy_setopt(curl, CURLOPT_URL, url);
+		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headerlist);
+		/* Define our callback to get called when there's data to be written */
+		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_fwrite);
+		/* Set a pointer to our struct to pass to the callback */
+		curl_easy_setopt(curl, CURLOPT_WRITEDATA, p);
+		/* Automaticlly decompress gzipped responses */
+		curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "gzip");
+		CURLcode res = curl_easy_perform(curl);
+
+		download_speed_ = 0.0;
+		curl_easy_getinfo(curl, CURLINFO_SPEED_DOWNLOAD, &download_speed_);
+
+		curl_easy_cleanup(curl);
+
+		XML_ParserFree(p);
+
+		if (res != CURLE_OK)
+			return false;
+		return true;
+	}
+
+	bool DASHTree::has_type(StreamType t)
+	{
+		if (periods_.empty())
+			return false;
+
+		for (std::vector<AdaptationSet *>::const_iterator b(periods_[0]->adaptationSets_.begin()), e(periods_[0]->adaptationSets_.end()); b != e; ++b)
+			if ((*b)->type_ == t)
+				return true;
+		return false;
+	}
+
+	uint32_t DASHTree::estimate_segcount(uint32_t duration, uint32_t timescale)
+	{
+		double tmp(duration);
+		duration /= timescale;
+		return static_cast<uint32_t>((overallSeconds_ / duration) * 1.01);
+	}
