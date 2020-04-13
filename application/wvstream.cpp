@@ -26,7 +26,7 @@
 #include "../libcurl/include/curl/curl.h"
 #include "oscompat.h"
 
-//#define MUXED_STREAM 1
+#define MUXED_STREAM 0
 
 /*******************************************************
 						CDM
@@ -999,8 +999,8 @@ int main(int argc, char *argv[])
 #else
 int main()
 {
-	//const char *lic = "TBD";
-	//const char *mpd = "TBD";
+	const char *lic = "https://mncnow.kochengtv.live/mncnow/YWY0OTBlZjEtODAyNC0zZTA0LWFhYzMtY2ZmMGE4NjVjZjU1";
+	const char *mpd = "https://anevia114.mncnow.id:443/live/eds/NetTV/sa_dash_vmx/NetTV.mpd";
 
 	Session s(0, mpd, lic);
 	//s.SetStreamProperties(,,,,,,); //use defaults
