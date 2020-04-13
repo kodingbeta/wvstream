@@ -493,6 +493,7 @@ text(void *data, const char *s, int len)
 static void ReplacePlaceHolders(std::string &rep, const std::string &id, uint32_t bandwidth)
 {
 	std::string::size_type repPos = rep.find("$RepresentationID$");
+	std::cout << "INFO: Parse Placeholder : " << rep << std::endl;
 	if (repPos != std::string::npos)
 		rep.replace(repPos, 18, id);
 
@@ -504,6 +505,7 @@ static void ReplacePlaceHolders(std::string &rep, const std::string &id, uint32_
 		rep.replace(repPos, 11, bw);
 	}
 }
+
 static void XMLCALL
 end(void *data, const char *el)
 {
