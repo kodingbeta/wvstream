@@ -10,6 +10,7 @@
 *****************************************************************************/
 
 #include "oscompat.h"
+#include <stdlib.h>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -25,5 +26,21 @@ const char *widevinedll = "widevinecdm.dll";
 #else
 bool WSASU(){return true;}
 void WSACU(){};
-const char *widevinedll = "/home/build/Dokumente/liberty-dev/wvstream/application/libwidevinecdm.so";
+const char *widevinedll = "./libwidevinecdm.so";
+time_t _mkgmtime(struct tm *tm)
+{
+  time_t ret;
+  char *tz;
+
+  tz = getenv("TZ");
+  setenv("TZ", "", 1);
+  tzset();
+  ret = mktime(tm);
+  if (tz)
+    setenv("TZ", tz, 1);
+  else
+    unsetenv("TZ");
+  tzset();
+  return ret;
+}
 #endif

@@ -10,6 +10,7 @@
 *****************************************************************************/
 
 #pragma once
+#include <time.h>
 
 bool WSASU();
 void WSACU();
@@ -26,4 +27,5 @@ extern const char *widevinedll;
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+time_t _mkgmtime(struct tm *tm);
 #endif
