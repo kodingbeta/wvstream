@@ -253,7 +253,7 @@ start(void *data, const char *el, const char **attr)
 							}
 							if (dash->current_representation_->timescale_)
 							{
-								dash->current_representation_->segments_.data.reserve(dash->estimate_segcount(
+								dash->current_representation_->segments_.reserve(dash->estimate_segcount(
 									dash->current_representation_->duration_,
 									dash->current_representation_->timescale_));
 								dash->currentNode_ |= DASHTree::MPDNODE_SEGMENTLIST;
@@ -307,12 +307,12 @@ start(void *data, const char *el, const char **attr)
 									r = atoi((const char *)*(attr + 1)) + 1;
 								attr += 2;
 							}
-							if (dash->current_adaptationset_->segment_durations_.data.empty())
+							if (dash->current_adaptationset_->segment_durations_.empty())
 								dash->current_adaptationset_->startPTS_ = t - (dash->base_time_) * dash->current_adaptationset_->timescale_;
 							if (d && r)
 							{
 								for (; r; --r)
-									dash->current_adaptationset_->segment_durations_.data.push_back(d);
+									dash->current_adaptationset_->segment_durations_.push_back(d);
 							}
 						}
 						else if (strcmp(el, "SegmentTimeline") == 0)
