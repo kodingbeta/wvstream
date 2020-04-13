@@ -53,6 +53,7 @@ public:
 	{
 		Representation() : timescale_(0), duration_(0), bandwidth_(0), samplingRate_(0), width_(0), height_(0),channelCount_(0), flags_(0), indexRangeMin_(0), indexRangeMax_(0), hasInitialization_(false){};
 		std::string url_;
+		std::string id;
 		std::string codecs_;
 		uint32_t bandwidth_;
 		uint32_t samplingRate_;
