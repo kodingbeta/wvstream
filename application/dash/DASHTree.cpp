@@ -31,72 +31,72 @@ DASHTree::~DASHTree()
 
 static uint8_t GetChannels(const char **attr)
 {
-  const char *schemeIdUri(0), *value(0);
+	const char *schemeIdUri(0), *value(0);
 
-  for (; *attr;)
-  {
-    if (strcmp((const char*)*attr, "schemeIdUri") == 0)
-      schemeIdUri = (const char*)*(attr + 1);
-    else if (strcmp((const char*)*attr, "value") == 0)
-      value = (const char*)*(attr + 1);
-    attr += 2;
-  }
-  if (schemeIdUri && value)
-  {
-    if (strcmp(schemeIdUri, "urn:mpeg:dash:23003:3:audio_channel_configuration:2011") == 0)
-      return atoi(value);
-    else if (strcmp(schemeIdUri, "urn:dolby:dash:audio_channel_configuration:2011") == 0)
-    {
-      if (strcmp(value, "F801") == 0)
-        return 6;
-      else if (strcmp(value, "FE01") == 0)
-        return 8;
-    }
-  }
-  return 0;
+	for (; *attr;)
+	{
+		if (strcmp((const char *)*attr, "schemeIdUri") == 0)
+			schemeIdUri = (const char *)*(attr + 1);
+		else if (strcmp((const char *)*attr, "value") == 0)
+			value = (const char *)*(attr + 1);
+		attr += 2;
+	}
+	if (schemeIdUri && value)
+	{
+		if (strcmp(schemeIdUri, "urn:mpeg:dash:23003:3:audio_channel_configuration:2011") == 0)
+			return atoi(value);
+		else if (strcmp(schemeIdUri, "urn:dolby:dash:audio_channel_configuration:2011") == 0)
+		{
+			if (strcmp(value, "F801") == 0)
+				return 6;
+			else if (strcmp(value, "FE01") == 0)
+				return 8;
+		}
+	}
+	return 0;
 }
 
 static void ParseSegmentTemplate(const char **attr, std::string baseURL, DASHTree::SegmentTemplate &tpl, bool adp)
 {
-  std::cout << "INFO: Parse Template : " << attr << std::endl;
-  uint64_t pto(0);
-  for (; *attr;)
-  {
-    if (strcmp((const char*)*attr, "timescale") == 0)
-      tpl.timescale = atoi((const char*)*(attr + 1));
-    else if (strcmp((const char*)*attr, "duration") == 0)
-      tpl.duration = atoi((const char*)*(attr + 1));
-    else if (strcmp((const char*)*attr, "media") == 0)
-      tpl.media = (const char*)*(attr + 1);
-    else if (strcmp((const char*)*attr, "startNumber") == 0)
-      tpl.startNumber = atoi((const char*)*(attr + 1));
-    else if (strcmp((const char*)*attr, "initialization") == 0)
-      tpl.initialization = (const char*)*(attr + 1);
-    else if (strcmp((const char*)*attr, "presentationTimeOffset") == 0)
-      pto = atoll((const char*)*(attr + 1));
-    attr += 2;
-  }
-  tpl.presentationTimeOffset = tpl.timescale ? (double)pto / tpl.timescale : 0;
-  tpl.media = baseURL + tpl.media;
+	std::cout << "INFO: Parse Template : " << attr << std::endl;
+	uint64_t pto(0);
+	for (; *attr;)
+	{
+		if (strcmp((const char *)*attr, "timescale") == 0)
+			tpl.timescale = atoi((const char *)*(attr + 1));
+		else if (strcmp((const char *)*attr, "duration") == 0)
+			tpl.duration = atoi((const char *)*(attr + 1));
+		else if (strcmp((const char *)*attr, "media") == 0)
+			tpl.media = (const char *)*(attr + 1);
+		else if (strcmp((const char *)*attr, "startNumber") == 0)
+			tpl.startNumber = atoi((const char *)*(attr + 1));
+		else if (strcmp((const char *)*attr, "initialization") == 0)
+			tpl.initialization = (const char *)*(attr + 1);
+		else if (strcmp((const char *)*attr, "presentationTimeOffset") == 0)
+			pto = atoll((const char *)*(attr + 1));
+		attr += 2;
+	}
+	tpl.presentationTimeOffset = tpl.timescale ? (double)pto / tpl.timescale : 0;
+	tpl.media = baseURL + tpl.media;
 }
 
-static time_t getTime(const char* timeStr)
+static time_t getTime(const char *timeStr)
 {
-  int year, mon, day, hour, minu, sec;
-  if (sscanf(timeStr, "%d-%d-%dT%d:%d:%d", &year, &mon, &day, &hour, &minu, &sec) == 6)
-  {
-    struct tm tmd;
+	int year, mon, day, hour, minu, sec;
+	if (sscanf(timeStr, "%d-%d-%dT%d:%d:%d", &year, &mon, &day, &hour, &minu, &sec) == 6)
+	{
+		struct tm tmd;
 
-    memset(&tmd,0,sizeof(tmd));
-    tmd.tm_year = year - 1900;
-    tmd.tm_mon = mon - 1;
-    tmd.tm_mday = day;
-    tmd.tm_hour = hour;
-    tmd.tm_min = minu;
-    tmd.tm_sec = sec;
-    return _mkgmtime(&tmd);
-  }
-  return ~0;
+		memset(&tmd, 0, sizeof(tmd));
+		tmd.tm_year = year - 1900;
+		tmd.tm_mon = mon - 1;
+		tmd.tm_mday = day;
+		tmd.tm_hour = hour;
+		tmd.tm_min = minu;
+		tmd.tm_sec = sec;
+		return _mkgmtime(&tmd);
+	}
+	return ~0;
 }
 
 /*----------------------------------------------------------------------
@@ -174,6 +174,69 @@ start(void *data, const char *el, const char **attr)
 							dash->currentNode_ |= DASHTree::MPDNODE_SEGMENTLIST;
 						}
 					}
+					else if (strcmp(el, "SegmentTimeline") == 0)
+					{
+						dash->current_representation_->flags_ |= DASHTree::Representation::TIMELINE;
+						dash->currentNode_ |= DASHTree::MPDNODE_SEGMENTTIMELINE;
+					}
+					else if (strcmp(el, "AudioChannelConfiguration") == 0)
+					{
+						dash->current_representation_->channelCount_ = GetChannels(attr);
+					}
+					else if (strcmp(el, "BaseURL") == 0)
+					{
+						dash->strXMLText_.clear();
+						dash->currentNode_ |= DASHTree::MPDNODE_BASEURL;
+					}
+					else if (strcmp(el, "SegmentList") == 0)
+					{
+
+						for (; *attr;)
+						{
+							if (strcmp((const char *)*attr, "duration") == 0)
+								dash->current_representation_->duration_ = atoi((const char *)*(attr + 1));
+							else if (strcmp((const char *)*attr, "timescale") == 0)
+								dash->current_representation_->timescale_ = atoi((const char *)*(attr + 1));
+							attr += 2;
+						}
+						if (dash->current_representation_->timescale_)
+						{
+							dash->current_representation_->segments_.reserve(dash->estimate_segcount(
+								dash->current_representation_->duration_,
+								dash->current_representation_->timescale_));
+							dash->currentNode_ |= DASHTree::MPDNODE_SEGMENTLIST;
+						}
+					}
+					else if (strcmp(el, "SegmentBase") == 0)
+					{
+						//<SegmentBase indexRangeExact = "true" indexRange = "867-1618">
+						for (; *attr;)
+						{
+							if (strcmp((const char *)*attr, "indexRange") == 0)
+								sscanf((const char *)*(attr + 1), "%u-%u", &dash->current_representation_->indexRangeMin_, &dash->current_representation_->indexRangeMax_);
+							else if (strcmp((const char *)*attr, "indexRangeExact") == 0 && strcmp((const char *)*(attr + 1), "true") == 0)
+								dash->current_representation_->flags_ |= DASHTree::Representation::INDEXRANGEEXACT;
+							dash->current_representation_->flags_ |= DASHTree::Representation::SEGMENTBASE;
+							attr += 2;
+						}
+						if (dash->current_representation_->indexRangeMax_)
+							dash->currentNode_ |= DASHTree::MPDNODE_SEGMENTLIST;
+					}
+					else if (strcmp(el, "SegmentTemplate") == 0)
+					{
+						std::cout << "INFO: Current Element : " << el << std::endl;
+						dash->current_representation_->segtpl_ = dash->current_adaptationset_->segtpl_;
+
+						ParseSegmentTemplate(attr, dash->current_representation_->url_, dash->current_representation_->segtpl_, false);
+						dash->current_representation_->flags_ |= DASHTree::Representation::TEMPLATE;
+						if (!dash->current_representation_->segtpl_.initialization.empty())
+						{
+							dash->current_representation_->flags_ |= DASHTree::Representation::INITIALIZATION;
+							dash->current_representation_->url_ += dash->current_representation_->segtpl_.initialization;
+							dash->current_representation_->timescale_ = dash->current_representation_->segtpl_.timescale;
+						}
+						dash->currentNode_ |= DASHTree::MPDNODE_SEGMENTTEMPLATE;
+					}
 					else if (dash->currentNode_ & DASHTree::MPDNODE_SEGMENTTEMPLATE)
 					{
 						if (dash->currentNode_ & DASHTree::MPDNODE_SEGMENTTIMELINE)
@@ -225,69 +288,6 @@ start(void *data, const char *el, const char **attr)
 								dash->currentNode_ &= ~DASHTree::MPDNODE_SEGMENTTIMELINE;
 								dash->current_representation_->timescale_ = 0;
 							}
-						}
-						else if (strcmp(el, "SegmentTimeline") == 0)
-						{
-							dash->current_representation_->flags_ |= DASHTree::Representation::TIMELINE;
-							dash->currentNode_ |= DASHTree::MPDNODE_SEGMENTTIMELINE;
-						}
-						else if (strcmp(el, "AudioChannelConfiguration") == 0)
-						{
-							dash->current_representation_->channelCount_ = GetChannels(attr);
-						}
-						else if (strcmp(el, "BaseURL") == 0)
-						{
-							dash->strXMLText_.clear();
-							dash->currentNode_ |= DASHTree::MPDNODE_BASEURL;
-						}
-						else if (strcmp(el, "SegmentList") == 0)
-						{
-
-							for (; *attr;)
-							{
-								if (strcmp((const char *)*attr, "duration") == 0)
-									dash->current_representation_->duration_ = atoi((const char *)*(attr + 1));
-								else if (strcmp((const char *)*attr, "timescale") == 0)
-									dash->current_representation_->timescale_ = atoi((const char *)*(attr + 1));
-								attr += 2;
-							}
-							if (dash->current_representation_->timescale_)
-							{
-								dash->current_representation_->segments_.reserve(dash->estimate_segcount(
-									dash->current_representation_->duration_,
-									dash->current_representation_->timescale_));
-								dash->currentNode_ |= DASHTree::MPDNODE_SEGMENTLIST;
-							}
-						}
-						else if (strcmp(el, "SegmentBase") == 0)
-						{
-							//<SegmentBase indexRangeExact = "true" indexRange = "867-1618">
-							for (; *attr;)
-							{
-								if (strcmp((const char *)*attr, "indexRange") == 0)
-									sscanf((const char *)*(attr + 1), "%u-%u", &dash->current_representation_->indexRangeMin_, &dash->current_representation_->indexRangeMax_);
-								else if (strcmp((const char *)*attr, "indexRangeExact") == 0 && strcmp((const char *)*(attr + 1), "true") == 0)
-									dash->current_representation_->flags_ |= DASHTree::Representation::INDEXRANGEEXACT;
-								dash->current_representation_->flags_ |= DASHTree::Representation::SEGMENTBASE;
-								attr += 2;
-							}
-							if (dash->current_representation_->indexRangeMax_)
-								dash->currentNode_ |= DASHTree::MPDNODE_SEGMENTLIST;
-						}
-						else if (strcmp(el, "SegmentTemplate") == 0)
-						{
-							std::cout << "INFO: Current Element : " << el << std::endl;
-							dash->current_representation_->segtpl_ = dash->current_adaptationset_->segtpl_;
-
-							ParseSegmentTemplate(attr, dash->current_representation_->url_, dash->current_representation_->segtpl_, false);
-							dash->current_representation_->flags_ |= DASHTree::Representation::TEMPLATE;
-							if (!dash->current_representation_->segtpl_.initialization.empty())
-							{
-								dash->current_representation_->flags_ |= DASHTree::Representation::INITIALIZATION;
-								dash->current_representation_->url_ += dash->current_representation_->segtpl_.initialization;
-								dash->current_representation_->timescale_ = dash->current_representation_->segtpl_.timescale;
-							}
-							dash->currentNode_ |= DASHTree::MPDNODE_SEGMENTTEMPLATE;
 						}
 					}
 					else if (dash->currentNode_ & DASHTree::MPDNODE_SEGMENTTEMPLATE)
@@ -433,7 +433,6 @@ start(void *data, const char *el, const char **attr)
 		dash->currentNode_ |= DASHTree::MPDNODE_MPD;
 	}
 }
-
 
 /*----------------------------------------------------------------------
 |   expat text
