@@ -51,7 +51,7 @@ public:
 
 	struct Representation
 	{
-		Representation() : timescale_(0), duration_(0), bandwidth_(0), samplingRate_(0), width_(0), height_(0),flags_(0), hasInitialization_(false){};
+		Representation() : timescale_(0), duration_(0), bandwidth_(0), samplingRate_(0), width_(0), height_(0),channelCount_(0), flags_(0), indexRangeMin_(0), indexRangeMax_(0), hasInitialization_(false){};
 		std::string url_;
 		std::string codecs_;
 		uint32_t bandwidth_;
@@ -71,6 +71,8 @@ public:
 
 		//SegmentList
 		uint32_t duration_, timescale_;
+		uint32_t indexRangeMin_, indexRangeMax_;
+      	uint8_t channelCount_;
 		std::vector<Segment> segments_;
 		Segment initialization_;
 		const Segment *get_initialization() const { return hasInitialization_ ? &segments_[0] : 0; };
@@ -93,7 +95,7 @@ public:
 
 	struct AdaptationSet
 	{
-		AdaptationSet() : type_(NOTYPE), timescale_(0){};
+		AdaptationSet() : type_(NOTYPE), timescale_(0), startPTS_(0){};
 		~AdaptationSet()
 		{
 			for (std::vector<Representation *>::const_iterator b(repesentations_.begin()), e(repesentations_.end()); b != e; ++b)
@@ -106,6 +108,7 @@ public:
 		std::vector<Representation *> repesentations_;
 		std::vector<uint32_t> segment_durations_;
 		SegmentTemplate segtpl_;
+		uint64_t startPTS_;
 	} * current_adaptationset_;
 
 	struct Period
