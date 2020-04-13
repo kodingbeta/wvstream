@@ -73,7 +73,7 @@ public:
 		uint32_t duration_, timescale_;
 		std::vector<Segment> segments_;
 		Segment initialization_;
-		const Segment *get_initialization() const { return hasInitialization_ ? &segments_[0] : (flags_ & INITIALIZATION) ? &initialization_ : 0; };
+		const Segment *get_initialization() const { return hasInitialization_ ? &segments_[0] : 0; };
 		const Segment *get_next_segment(const Segment *seg) const
 		{
 			uint32_t curpos = static_cast<uint32_t>(seg - &segments_[0] + 1);

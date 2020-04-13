@@ -100,10 +100,10 @@ start(void *data, const char *el, const char **attr)
 							if (d && r)
 							{
 								DASHTree::Segment s;
-								if (dash->current_representation_->segments_.data.empty())
+								if (dash->current_representation_->segments_.empty())
 								{
 									if (dash->current_representation_->segtpl_.duration && dash->current_representation_->segtpl_.timescale)
-										dash->current_representation_->segments_.data.reserve((unsigned int)(dash->overallSeconds_ / (((double)dash->current_representation_->segtpl_.duration) / dash->current_representation_->segtpl_.timescale)) + 1);
+										dash->current_representation_->segments_.reserve((unsigned int)(dash->overallSeconds_ / (((double)dash->current_representation_->segtpl_.duration) / dash->current_representation_->segtpl_.timescale)) + 1);
 
 									if (dash->current_representation_->flags_ & DASHTree::Representation::INITIALIZATION)
 									{
@@ -113,13 +113,13 @@ start(void *data, const char *el, const char **attr)
 									s.range_end_ = dash->current_representation_->segtpl_.startNumber;
 								}
 								else
-									s.range_end_ = dash->current_representation_->segments_.data.back().range_end_ + 1;
+									s.range_end_ = dash->current_representation_->segments_.back().range_end_ + 1;
 								s.range_begin_ = s.startPTS_ = t;
 								s.startPTS_ -= (dash->base_time_) * dash->current_representation_->segtpl_.timescale;
 
 								for (; r; --r)
 								{
-									dash->current_representation_->segments_.data.push_back(s);
+									dash->current_representation_->segments_.push_back(s);
 									++s.range_end_;
 									s.range_begin_ = (t += d);
 									s.startPTS_ += d;
