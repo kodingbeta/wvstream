@@ -58,7 +58,7 @@ static uint8_t GetChannels(const char **attr)
 
 static void ParseSegmentTemplate(const char **attr, std::string baseURL, DASHTree::SegmentTemplate &tpl, bool adp)
 {
-	std::cout << "INFO: Parse Template : " << attr << std::endl;
+	std::cout << "INFO: Parse Template : " << *attr << std::endl;
 	uint64_t pto(0);
 	for (; *attr;)
 	{
@@ -78,6 +78,7 @@ static void ParseSegmentTemplate(const char **attr, std::string baseURL, DASHTre
 	}
 	tpl.presentationTimeOffset = tpl.timescale ? (double)pto / tpl.timescale : 0;
 	tpl.media = baseURL + tpl.media;
+	std::cout << "INFO: Template Media : " << tpl.media << std::endl;
 }
 
 static time_t getTime(const char *timeStr)
@@ -107,6 +108,7 @@ start(void *data, const char *el, const char **attr)
 {
 	DASHTree *dash(reinterpret_cast<DASHTree *>(data));
 	std::cout << "INFO: Current Node : " << dash->currentNode_ << std::endl;
+	std::cout << "INFO: Current Base Url : " << dash->base_url_ << std::endl;
 	if (dash->currentNode_ & DASHTree::MPDNODE_MPD)
 	{
 		if (dash->currentNode_ & DASHTree::MPDNODE_PERIOD)
@@ -416,6 +418,7 @@ start(void *data, const char *el, const char **attr)
 		{
 			dash->current_period_ = new DASHTree::Period();
 			dash->current_period_->base_url_ = dash->base_url_;
+			
 			dash->periods_.push_back(dash->current_period_);
 			dash->currentNode_ |= DASHTree::MPDNODE_PERIOD;
 		}
