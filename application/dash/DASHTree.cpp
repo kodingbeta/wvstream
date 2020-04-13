@@ -137,12 +137,12 @@ start(void *data, const char *el, const char **attr)
 									r = atoi((const char *)*(attr + 1)) + 1;
 								attr += 2;
 							}
-							if (dash->current_adaptationset_->segment_durations_.data.empty())
+							if (dash->current_adaptationset_->segment_durations_.empty())
 								dash->current_adaptationset_->startPTS_ = t - (dash->base_time_) * dash->current_adaptationset_->timescale_;
 							if (d && r)
 							{
 								for (; r; --r)
-									dash->current_adaptationset_->segment_durations_.data.push_back(d);
+									dash->current_adaptationset_->segment_durations_.push_back(d);
 							}
 						}
 						else if (strcmp(el, "SegmentTimeline") == 0)
@@ -551,14 +551,14 @@ end(void *data, const char *el)
 					}
 					else if (strcmp(el, "Representation") == 0)
 						dash->currentNode_ &= ~DASHTree::MPDNODE_REPRESENTATION;
-					if (dash->current_representation_->segments_.data.empty())
+					if (dash->current_representation_->segments_.empty())
 					{
 						bool isSegmentTpl(!dash->current_representation_->segtpl_.media.empty());
 						DASHTree::SegmentTemplate &tpl(isSegmentTpl ? dash->current_representation_->segtpl_ : dash->current_adaptationset_->segtpl_);
 
-						if (!tpl.media.empty() && dash->overallSeconds_ > 0 && tpl.timescale > 0 && (tpl.duration > 0 || dash->current_adaptationset_->segment_durations_.data.size()))
+						if (!tpl.media.empty() && dash->overallSeconds_ > 0 && tpl.timescale > 0 && (tpl.duration > 0 || dash->current_adaptationset_->segment_durations_.size()))
 						{
-							unsigned int countSegs = !dash->current_adaptationset_->segment_durations_.data.empty() ? dash->current_adaptationset_->segment_durations_.data.size() : (unsigned int)(dash->overallSeconds_ / (((double)tpl.duration) / tpl.timescale)) + 1;
+							unsigned int countSegs = !dash->current_adaptationset_->segment_durations_.data.empty() ? dash->current_adaptationset_->segment_durations_.size() : (unsigned int)(dash->overallSeconds_ / (((double)tpl.duration) / tpl.timescale)) + 1;
 
 							if (countSegs < 65536)
 							{
@@ -567,7 +567,7 @@ end(void *data, const char *el)
 
 								dash->current_representation_->flags_ |= DASHTree::Representation::TEMPLATE;
 
-								dash->current_representation_->segments_.data.reserve(countSegs);
+								dash->current_representation_->segments_.reserve(countSegs);
 								if (!tpl.initialization.empty())
 								{
 									seg.range_end_ = ~0;
@@ -584,7 +584,7 @@ end(void *data, const char *el)
 								}
 
 								std::vector<uint32_t>::const_iterator sdb(dash->current_adaptationset_->segment_durations_.begin()),
-									sde(dash->current_adaptationset_->segment_durations_.data.end());
+									sde(dash->current_adaptationset_->segment_durations_.end());
 								bool timeBased = sdb != sde && tpl.media.find("$Time") != std::string::npos;
 								if (timeBased)
 									dash->current_representation_->flags_ |= DASHTree::Representation::TIMETEMPLATE;
@@ -597,7 +597,7 @@ end(void *data, const char *el)
 
 								for (; countSegs; --countSegs)
 								{
-									dash->current_representation_->segments_.data.push_back(seg);
+									dash->current_representation_->segments_.push_back(seg);
 									seg.startPTS_ += (sdb != sde) ? *sdb : tpl.duration;
 									seg.range_end_ += timeBased ? *(sdb++) : 1;
 								}
