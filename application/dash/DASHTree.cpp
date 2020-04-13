@@ -20,15 +20,13 @@
 using namespace dash;
 
 DASHTree::DASHTree()
-	:download_speed_(0.0)
+	: download_speed_(0.0)
 {
 }
-
 
 DASHTree::~DASHTree()
 {
 }
-
 
 /*----------------------------------------------------------------------
 |   expat start
@@ -36,7 +34,7 @@ DASHTree::~DASHTree()
 static void XMLCALL
 start(void *data, const char *el, const char **attr)
 {
-	DASHTree *dash(reinterpret_cast<DASHTree*>(data));
+	DASHTree *dash(reinterpret_cast<DASHTree *>(data));
 
 	if (dash->currentNode_ & DASHTree::MPDNODE_MPD)
 	{
@@ -56,9 +54,9 @@ start(void *data, const char *el, const char **attr)
 						{
 							for (; *attr;)
 							{
-								if (strcmp((const char*)*attr, "mediaRange") == 0)
+								if (strcmp((const char *)*attr, "mediaRange") == 0)
 								{
-									seg.SetRange((const char*)*(attr + 1));
+									seg.SetRange((const char *)*(attr + 1));
 									break;
 								}
 								attr += 2;
@@ -68,9 +66,9 @@ start(void *data, const char *el, const char **attr)
 						{
 							for (; *attr;)
 							{
-								if (strcmp((const char*)*attr, "range") == 0)
+								if (strcmp((const char *)*attr, "range") == 0)
 								{
-									seg.SetRange((const char*)*(attr + 1));
+									seg.SetRange((const char *)*(attr + 1));
 									break;
 								}
 								attr += 2;
@@ -80,6 +78,64 @@ start(void *data, const char *el, const char **attr)
 						else
 							return;
 						dash->current_representation_->segments_.push_back(seg);
+					}
+					else if (dash->currentNode_ & DASHTree::MPDNODE_SEGMENTTEMPLATE)
+					{
+						if (dash->currentNode_ & DASHTree::MPDNODE_SEGMENTTIMELINE)
+						{
+							// <S t="3600" d="900000" r="2398"/>
+							unsigned int d(0), r(1);
+							static uint64_t t(0);
+
+							for (; *attr;)
+							{
+								if (strcmp((const char *)*attr, "t") == 0)
+									t = atoll((const char *)*(attr + 1));
+								else if (strcmp((const char *)*attr, "d") == 0)
+									d = atoi((const char *)*(attr + 1));
+								if (strcmp((const char *)*attr, "r") == 0)
+									r = atoi((const char *)*(attr + 1)) + 1;
+								attr += 2;
+							}
+							if (d && r)
+							{
+								DASHTree::Segment s;
+								if (dash->current_representation_->segments_.data.empty())
+								{
+									if (dash->current_representation_->segtpl_.duration && dash->current_representation_->segtpl_.timescale)
+										dash->current_representation_->segments_.data.reserve((unsigned int)(dash->overallSeconds_ / (((double)dash->current_representation_->segtpl_.duration) / dash->current_representation_->segtpl_.timescale)) + 1);
+
+									if (dash->current_representation_->flags_ & DASHTree::Representation::INITIALIZATION)
+									{
+										s.range_begin_ = s.range_end_ = ~0;
+										dash->current_representation_->initialization_ = s;
+									}
+									s.range_end_ = dash->current_representation_->segtpl_.startNumber;
+								}
+								else
+									s.range_end_ = dash->current_representation_->segments_.data.back().range_end_ + 1;
+								s.range_begin_ = s.startPTS_ = t;
+								s.startPTS_ -= (dash->base_time_) * dash->current_representation_->segtpl_.timescale;
+
+								for (; r; --r)
+								{
+									dash->current_representation_->segments_.data.push_back(s);
+									++s.range_end_;
+									s.range_begin_ = (t += d);
+									s.startPTS_ += d;
+								}
+							}
+							else //Failure
+							{
+								dash->currentNode_ &= ~DASHTree::MPDNODE_SEGMENTTIMELINE;
+								dash->current_representation_->timescale_ = 0;
+							}
+						}
+						else if (strcmp(el, "SegmentTimeline") == 0)
+						{
+							dash->current_representation_->flags_ |= DASHTree::Representation::TIMELINE;
+							dash->currentNode_ |= DASHTree::MPDNODE_SEGMENTTIMELINE;
+						}
 					}
 					else if (strcmp(el, "BaseURL") == 0)
 					{
@@ -91,10 +147,10 @@ start(void *data, const char *el, const char **attr)
 
 						for (; *attr;)
 						{
-							if (strcmp((const char*)*attr, "duration") == 0)
-								dash->current_representation_->duration_ = atoi((const char*)*(attr + 1));
-							else if (strcmp((const char*)*attr, "timescale") == 0)
-								dash->current_representation_->timescale_ = atoi((const char*)*(attr + 1));
+							if (strcmp((const char *)*attr, "duration") == 0)
+								dash->current_representation_->duration_ = atoi((const char *)*(attr + 1));
+							else if (strcmp((const char *)*attr, "timescale") == 0)
+								dash->current_representation_->timescale_ = atoi((const char *)*(attr + 1));
 							attr += 2;
 						}
 						if (dash->current_representation_->timescale_)
@@ -105,12 +161,11 @@ start(void *data, const char *el, const char **attr)
 							dash->currentNode_ |= DASHTree::MPDNODE_SEGMENTLIST;
 						}
 					}
-
 				}
 				else if (dash->currentNode_ & DASHTree::MPDNODE_SEGMENTDURATIONS)
 				{
-					if (strcmp(el, "S") == 0 && *(const char*)*attr == 'd')
-						dash->current_adaptationset_->segment_durations_.push_back(atoi((const char*)*(attr + 1)));
+					if (strcmp(el, "S") == 0 && *(const char *)*attr == 'd')
+						dash->current_adaptationset_->segment_durations_.push_back(atoi((const char *)*(attr + 1)));
 				}
 				else if (dash->currentNode_ & DASHTree::MPDNODE_CONTENTPROTECTION)
 				{
@@ -123,16 +178,16 @@ start(void *data, const char *el, const char **attr)
 					dash->current_adaptationset_->repesentations_.push_back(dash->current_representation_);
 					for (; *attr;)
 					{
-						if (strcmp((const char*)*attr, "bandwidth") == 0)
-							dash->current_representation_->bandwidth_ = atoi((const char*)*(attr + 1));
-						else if (strcmp((const char*)*attr, "codecs") == 0)
-							dash->current_representation_->codecs_ = (const char*)*(attr + 1);
-						else if (strcmp((const char*)*attr, "width") == 0)
-							dash->current_representation_->width_ = static_cast<uint16_t>(atoi((const char*)*(attr + 1)));
-						else if (strcmp((const char*)*attr, "height") == 0)
-							dash->current_representation_->height_ = static_cast<uint16_t>(atoi((const char*)*(attr + 1)));
-						else if (strcmp((const char*)*attr, "audioSamplingRate") == 0)
-							dash->current_representation_->samplingRate_ = static_cast<uint32_t>(atoi((const char*)*(attr + 1)));
+						if (strcmp((const char *)*attr, "bandwidth") == 0)
+							dash->current_representation_->bandwidth_ = atoi((const char *)*(attr + 1));
+						else if (strcmp((const char *)*attr, "codecs") == 0)
+							dash->current_representation_->codecs_ = (const char *)*(attr + 1);
+						else if (strcmp((const char *)*attr, "width") == 0)
+							dash->current_representation_->width_ = static_cast<uint16_t>(atoi((const char *)*(attr + 1)));
+						else if (strcmp((const char *)*attr, "height") == 0)
+							dash->current_representation_->height_ = static_cast<uint16_t>(atoi((const char *)*(attr + 1)));
+						else if (strcmp((const char *)*attr, "audioSamplingRate") == 0)
+							dash->current_representation_->samplingRate_ = static_cast<uint32_t>(atoi((const char *)*(attr + 1)));
 						attr += 2;
 					}
 					dash->currentNode_ |= DASHTree::MPDNODE_REPRESENTATION;
@@ -149,9 +204,9 @@ start(void *data, const char *el, const char **attr)
 					bool wvfound(false);
 					for (; *attr;)
 					{
-						if (strcmp((const char*)*attr, "schemeIdUri") == 0)
+						if (strcmp((const char *)*attr, "schemeIdUri") == 0)
 						{
-							wvfound = strcmp((const char*)*(attr + 1), "urn:uuid:EDEF8BA9-79D6-4ACE-A3C8-27DCD51D21ED") == 0;
+							wvfound = strcmp((const char *)*(attr + 1), "urn:uuid:EDEF8BA9-79D6-4ACE-A3C8-27DCD51D21ED") == 0;
 							break;
 						}
 						attr += 2;
@@ -168,15 +223,15 @@ start(void *data, const char *el, const char **attr)
 				dash->adp_pssh_.clear();
 				for (; *attr;)
 				{
-					if (strcmp((const char*)*attr, "contentType") == 0)
+					if (strcmp((const char *)*attr, "contentType") == 0)
 						dash->current_adaptationset_->type_ =
-						stricmp((const char*)*(attr + 1), "video") == 0 ? DASHTree::VIDEO
-						: stricmp((const char*)*(attr + 1), "audio") == 0 ? DASHTree::AUDIO
-						: DASHTree::NOTYPE;
-					else if (strcmp((const char*)*attr, "lang") == 0)
-						dash->current_adaptationset_->language_ = (const char*)*(attr + 1);
-					else if (strcmp((const char*)*attr, "mimeType") == 0)
-						dash->current_adaptationset_->mimeType_ = (const char*)*(attr + 1);
+							stricmp((const char *)*(attr + 1), "video") == 0 ? DASHTree::VIDEO
+																			 : stricmp((const char *)*(attr + 1), "audio") == 0 ? DASHTree::AUDIO
+																																: DASHTree::NOTYPE;
+					else if (strcmp((const char *)*attr, "lang") == 0)
+						dash->current_adaptationset_->language_ = (const char *)*(attr + 1);
+					else if (strcmp((const char *)*attr, "mimeType") == 0)
+						dash->current_adaptationset_->mimeType_ = (const char *)*(attr + 1);
 					attr += 2;
 				}
 				if (dash->current_adaptationset_->type_ == DASHTree::NOTYPE)
@@ -207,9 +262,9 @@ start(void *data, const char *el, const char **attr)
 		dash->overallSeconds_ = 0;
 		for (; *attr;)
 		{
-			if (strcmp((const char*)*attr, "mediaPresentationDuration") == 0)
+			if (strcmp((const char *)*attr, "mediaPresentationDuration") == 0)
 			{
-				mpt = (const char*)*(attr + 1);
+				mpt = (const char *)*(attr + 1);
 				break;
 			}
 			attr += 2;
@@ -226,7 +281,7 @@ start(void *data, const char *el, const char **attr)
 static void XMLCALL
 text(void *data, const char *s, int len)
 {
-	DASHTree *dash(reinterpret_cast<DASHTree*>(data));
+	DASHTree *dash(reinterpret_cast<DASHTree *>(data));
 	if (dash->currentNode_ & (DASHTree::MPDNODE_BASEURL | DASHTree::MPDNODE_PSSH))
 		dash->strXMLText_ += std::string(s, len);
 }
@@ -237,7 +292,7 @@ text(void *data, const char *s, int len)
 static void XMLCALL
 end(void *data, const char *el)
 {
-	DASHTree *dash(reinterpret_cast<DASHTree*>(data));
+	DASHTree *dash(reinterpret_cast<DASHTree *>(data));
 
 	if (dash->currentNode_ & DASHTree::MPDNODE_MPD)
 	{
@@ -262,6 +317,20 @@ end(void *data, const char *el)
 							dash->currentNode_ &= ~DASHTree::MPDNODE_SEGMENTLIST;
 							if (!dash->segcount_)
 								dash->segcount_ = dash->current_representation_->segments_.size();
+						}
+					}
+					else if (dash->currentNode_ & DASHTree::MPDNODE_SEGMENTTEMPLATE)
+					{
+						if (dash->currentNode_ & DASHTree::MPDNODE_SEGMENTTIMELINE)
+						{
+							if (strcmp(el, "SegmentTimeline") == 0)
+								dash->currentNode_ &= ~DASHTree::MPDNODE_SEGMENTTIMELINE;
+						}
+						else if (strcmp(el, "SegmentTemplate") == 0)
+						{
+							if (dash->current_representation_->segtpl_.presentationTimeOffset < dash->minPresentationOffset)
+								dash->minPresentationOffset = dash->current_representation_->segtpl_.presentationTimeOffset;
+							dash->currentNode_ &= ~DASHTree::MPDNODE_SEGMENTTEMPLATE;
 						}
 					}
 					else if (strcmp(el, "Representation") == 0)
@@ -319,11 +388,10 @@ static size_t curl_fwrite(void *buffer, size_t size, size_t nmemb, void *dest)
 	XML_Parser parser(reinterpret_cast<XML_Parser>(dest));
 
 	bool done(false);
-	if (XML_Parse(parser, (const char*)buffer, size*nmemb, done) == XML_STATUS_ERROR)
+	if (XML_Parse(parser, (const char *)buffer, size * nmemb, done) == XML_STATUS_ERROR)
 		return 0;
-	return size*nmemb;
+	return size * nmemb;
 }
-
 
 /*----------------------------------------------------------------------
 |   DASHTree
@@ -346,7 +414,7 @@ bool DASHTree::open(const char *url)
 	XML_Parser p = XML_ParserCreate(NULL);
 	if (!p)
 		return false;
-	XML_SetUserData(p, (void*)this);
+	XML_SetUserData(p, (void *)this);
 	XML_SetElementHandler(p, start, end);
 	XML_SetCharacterDataHandler(p, text);
 	currentNode_ = 0;
@@ -394,7 +462,7 @@ bool DASHTree::has_type(StreamType t)
 	if (periods_.empty())
 		return false;
 
-	for (std::vector<AdaptationSet*>::const_iterator b(periods_[0]->adaptationSets_.begin()), e(periods_[0]->adaptationSets_.end()); b != e; ++b)
+	for (std::vector<AdaptationSet *>::const_iterator b(periods_[0]->adaptationSets_.begin()), e(periods_[0]->adaptationSets_.end()); b != e; ++b)
 		if ((*b)->type_ == t)
 			return true;
 	return false;
@@ -404,5 +472,5 @@ uint32_t DASHTree::estimate_segcount(uint32_t duration, uint32_t timescale)
 {
 	double tmp(duration);
 	duration /= timescale;
-	return static_cast<uint32_t>((overallSeconds_ / duration)*1.01);
+	return static_cast<uint32_t>((overallSeconds_ / duration) * 1.01);
 }
